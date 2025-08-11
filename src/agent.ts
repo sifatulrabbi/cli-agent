@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -5,6 +6,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+
+const cfg = dotenv.config({ path: ".env" });
 
 const GENERATED_DIR = path.resolve(process.cwd(), "generated");
 
@@ -125,8 +128,9 @@ const readFilesTool = tool(
 const tools = [fileModificationTool, listAvailableFilesTool, readFilesTool];
 
 const model = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: cfg.parsed?.OPENAI_API_KEY,
   model: "o4-mini",
+  streaming: true,
   useResponsesApi: true,
   reasoning: {
     effort: "low",
