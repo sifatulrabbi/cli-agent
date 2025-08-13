@@ -213,7 +213,6 @@ const MessageView: React.FC<{
   }
   return null;
 };
-const MemoMessageView = React.memo(MessageView);
 
 const App: React.FC = () => {
   const { exit } = useApp();
@@ -282,7 +281,7 @@ const App: React.FC = () => {
 
       <Box flexDirection="column" flexGrow={1}>
         {messages.map((m, idx) => (
-          <MemoMessageView
+          <MessageView
             key={m.id ?? idx}
             message={m}
             isFirst={idx === 0}

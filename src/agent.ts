@@ -98,20 +98,46 @@ function callModelFactory(
 
     try {
       const stream = await llm.bindTools(tools).stream(messages);
+      let finalResponse: AIMessage | undefined = undefined;
       let response: AIMessageChunk | undefined = undefined;
       for await (const chunk of stream) {
         response = response !== undefined ? concat(response, chunk) : chunk;
-        if (response) {
-          updateHistory([...state.messages, response], `thinking...`);
+        if (response && response.content) {
+          finalResponse = new AIMessage({
+            content: response.content,
+            tool_calls: response.tool_calls || [],
+            id: response.id,
+            response_metadata: response.response_metadata,
+            usage_metadata: response.usage_metadata,
+            invalid_tool_calls: response.invalid_tool_calls,
+            additional_kwargs: response.additional_kwargs,
+          });
+          updateHistory([...state.messages, finalResponse], `thinking...`);
         }
       }
 
       if (!response) throw new Error("No response from model");
       response.tool_calls = response.tool_calls?.map((tc) => ({
         ...tc,
-        args: JSON.parse((tc.args as unknown as string) ?? "{}"),
+        args: tc.args
+          ? typeof tc.args === "string"
+            ? JSON.parse(tc.args)
+            : tc.args
+          : {},
       }));
-      return { messages: [response] };
+      finalResponse = new AIMessage({
+        content: response.content ?? "",
+        tool_calls: response.tool_calls || [],
+        id: response.id,
+        response_metadata: response.response_metadata,
+        usage_metadata: response.usage_metadata,
+        invalid_tool_calls: response.invalid_tool_calls,
+        additional_kwargs: response.additional_kwargs,
+      });
+
+      updateHistory([...state.messages, finalResponse], `thinking...`);
+
+      return { messages: [finalResponse] };
     } catch (error) {
       console.error(error);
       return {
@@ -181,8 +207,10 @@ export function loadHistory(historyPath: string): BaseMessage[] {
           switch (typeId) {
             case "HumanMessage":
               return new HumanMessage(kwargs);
+            case "AIMessageChunk":
             case "AIMessage":
               return new AIMessage(kwargs);
+            case "ToolMessageChunk":
             case "ToolMessage":
               return new ToolMessage(kwargs);
             case "SystemMessage":
