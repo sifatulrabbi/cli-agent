@@ -4,7 +4,7 @@ import { invokeDebuggerAgent as invokeAgent } from "@/agent";
 import { ensureHistoryFileExists } from "@/utils";
 
 const llm = new ChatOpenAI({
-  model: "o4-mini",
+  model: "gpt-5",
   useResponsesApi: true,
   reasoning: {
     effort: "high",
@@ -12,6 +12,6 @@ const llm = new ChatOpenAI({
   },
 });
 
-const historyPath = `benchmarks/results/o4-mini-medium.json`;
+const historyPath = `benchmarks/results/gpt-5-high.json`;
 ensureHistoryFileExists(historyPath);
-await invokeAgent(llm, toolsSet1, { historyPath });
+await invokeAgent(llm, toolsSet1, { historyPath, trimReasoning: false });

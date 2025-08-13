@@ -5,6 +5,7 @@ import {
   BaseMessage,
   ToolMessage,
   AIMessage,
+  AIMessageChunk,
 } from "@langchain/core/messages";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
@@ -15,6 +16,7 @@ import fs from "fs";
 export type DebuggerAgentOptions = {
   historyPath: string;
   systemInstruction?: string;
+  trimReasoning?: boolean;
 };
 
 function defaultSystemInstruction(): string {
@@ -106,8 +108,9 @@ function callModelFactory(
   llm: ChatOpenAI,
   sysMsg: SystemMessage,
   tools: DynamicStructuredTool[],
+  trimReasoning: boolean = false,
 ) {
-  function extractDisplayParts(message: AIMessage) {
+  function extractDisplayParts(message: AIMessage | AIMessageChunk) {
     const toolNamesSet = new Set<string>();
     let thinking = "";
     let reply = "";
@@ -157,9 +160,10 @@ function callModelFactory(
   return async function (state: typeof MessagesAnnotation.State) {
     const messages = [sysMsg, ...state.messages];
     console.log(chalk.blue("Invoking the LLM..."));
+
     const response = await llm.bindTools(tools).invoke(
       messages.map((msg) => {
-        if (msg.getType() === "ai") {
+        if (trimReasoning && msg.getType() === "ai") {
           const aiMsg = msg as AIMessage;
           if (aiMsg.additional_kwargs?.reasoning) {
             delete aiMsg.additional_kwargs.reasoning;
@@ -170,7 +174,7 @@ function callModelFactory(
     );
 
     // Pretty-print the response parts to the terminal
-    const { toolNames, thinking, reply } = extractDisplayParts(response as any);
+    const { toolNames, thinking, reply } = extractDisplayParts(response);
     if (thinking) {
       console.log(chalk.gray(thinking));
     }
@@ -240,7 +244,7 @@ export async function invokeDebuggerAgent(
   }
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("llm", callModelFactory(llm, system, tools))
+    .addNode("llm", callModelFactory(llm, system, tools, options.trimReasoning))
     .addNode("tools", toolNode)
     .addConditionalEdges(START, (state) => {
       if (state.messages.at(-1)?.getType() === "ai") {

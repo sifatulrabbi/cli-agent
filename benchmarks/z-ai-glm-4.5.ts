@@ -4,14 +4,13 @@ import { invokeDebuggerAgent as invokeAgent } from "@/agent";
 import { ensureHistoryFileExists } from "@/utils";
 
 const llm = new ChatOpenAI({
-  model: "o4-mini",
-  useResponsesApi: true,
-  reasoning: {
-    effort: "high",
-    summary: "auto",
+  model: "z-ai/glm-4.5v",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  configuration: {
+    baseURL: "https://openrouter.ai/api/v1",
   },
 });
 
-const historyPath = `benchmarks/results/o4-mini-medium.json`;
+const historyPath = `benchmarks/results/z-ai-glm-4.5.json`;
 ensureHistoryFileExists(historyPath);
 await invokeAgent(llm, toolsSet1, { historyPath });
