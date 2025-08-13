@@ -13,9 +13,12 @@ async function benchGpt41() {
   const model = "openai/gpt-oss-20b";
   const llm = new ChatOpenAI({
     model,
-    reasoning: {
-      effort: "high",
+    modelKwargs: {
+      reasoning_effort: "high",
     },
+    // reasoning: {
+    //   effort: "high",
+    // },
     apiKey: process.env.OPENROUTER_API_KEY,
     configuration: {
       baseURL: "https://openrouter.ai/api/v1",
