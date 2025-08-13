@@ -20,31 +20,53 @@ export type DebuggerAgentOptions = {
   trimReasoning?: boolean;
 };
 
-const gpt41mini = new ChatOpenAI({
-  model: "gpt-4.1-mini",
-  useResponsesApi: true,
-});
-
-const gpt41 = new ChatOpenAI({
-  model: "gpt-4.1",
-  useResponsesApi: true,
-});
-
-const gptOss120b = new ChatOpenAI({
-  model: "gpt-oss-120b",
-  modelKwargs: {
-    reasoning_effort: "high",
-  },
-  apiKey: process.env.OPENROUTER_API_KEY,
-  configuration: {
-    baseURL: "https://openrouter.ai/api/v1",
-  },
-});
-
 export const models = {
-  gpt41mini,
-  gpt41,
-  gptOss120b,
+  gpt41mini: new ChatOpenAI({
+    model: "gpt-4.1-mini",
+    useResponsesApi: true,
+  }),
+  gpt41: new ChatOpenAI({
+    model: "gpt-4.1",
+    useResponsesApi: true,
+  }),
+  gptOss120b: new ChatOpenAI({
+    model: "gpt-oss-120b",
+    modelKwargs: {
+      reasoning_effort: "high",
+    },
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "https://openrouter.ai/api/v1",
+    },
+  }),
+  codexMini: new ChatOpenAI({
+    model: "codex-mini",
+    useResponsesApi: true,
+  }),
+  o4MiniHigh: new ChatOpenAI({
+    model: "o4-mini",
+    reasoning: {
+      effort: "high",
+      summary: "auto",
+    },
+    useResponsesApi: true,
+  }),
+  gpt5: new ChatOpenAI({
+    model: "gpt-5",
+    reasoning: {
+      effort: "minimal",
+      summary: "auto",
+    },
+    useResponsesApi: true,
+  }),
+  gpt5High: new ChatOpenAI({
+    model: "gpt-5",
+    reasoning: {
+      effort: "high",
+      summary: "auto",
+    },
+    useResponsesApi: true,
+  }),
 };
 
 function defaultSystemInstruction(): string {
