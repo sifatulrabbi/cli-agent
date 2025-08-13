@@ -3,9 +3,7 @@ import { toolsSet1 } from "../toolsSet1";
 import { invokeDebuggerAgent as invokeAgent } from "../agent";
 import fs from "fs";
 
-const startingUserMsg = `
-Hello! how can you help me?
-`;
+// const startingUserMsg = `
 // Build me a todo app using React 18 and Tailwind CSS 3. The todo app should have the following features:
 // 1) add a todo
 // 2) delete a todo
@@ -35,7 +33,7 @@ async function benchGpt41() {
 
   const historyPath = `src/benchmarks/o4-mini-medium.json`;
   ensureHistoryFileExists(historyPath);
-  await invokeAgent(llm, startingUserMsg, toolsSet1, { historyPath });
+  await invokeAgent(llm, toolsSet1, { historyPath });
 }
 
 await benchGpt41();

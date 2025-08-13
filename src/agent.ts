@@ -157,7 +157,17 @@ function callModelFactory(
   return async function (state: typeof MessagesAnnotation.State) {
     const messages = [sysMsg, ...state.messages];
     console.log(chalk.blue("Invoking the LLM..."));
-    const response = await llm.bindTools(tools).invoke(messages);
+    const response = await llm.bindTools(tools).invoke(
+      messages.map((msg) => {
+        if (msg.getType() === "ai") {
+          const aiMsg = msg as AIMessage;
+          if (aiMsg.additional_kwargs?.reasoning) {
+            delete aiMsg.additional_kwargs.reasoning;
+          }
+        }
+        return msg;
+      }),
+    );
 
     // Pretty-print the response parts to the terminal
     const { toolNames, thinking, reply } = extractDisplayParts(response as any);
@@ -187,7 +197,6 @@ function syncHistory(historyPath: string, messages: BaseMessage[]) {
 
 export async function invokeDebuggerAgent(
   llm: ChatOpenAI,
-  userInput: string,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,
 ) {
@@ -233,7 +242,16 @@ export async function invokeDebuggerAgent(
   const graph = new StateGraph(MessagesAnnotation)
     .addNode("llm", callModelFactory(llm, system, tools))
     .addNode("tools", toolNode)
-    .addEdge(START, "llm")
+    .addConditionalEdges(START, (state) => {
+      if (state.messages.at(-1)?.getType() === "ai") {
+        const lastMsg = state.messages.at(-1) as AIMessage;
+        if (lastMsg.tool_calls && lastMsg.tool_calls.length > 0) {
+          console.log("Found remaining tool calls");
+          return "tools";
+        }
+      }
+      return "llm";
+    })
     .addConditionalEdges("llm", (state) => {
       syncHistory(options.historyPath, state.messages);
       return toolsCondition(state);
@@ -242,7 +260,7 @@ export async function invokeDebuggerAgent(
     .compile();
 
   const result = await graph.invoke(
-    { messages: [...history, new HumanMessage(userInput)] },
+    { messages: history },
     { recursionLimit: 10 ** 10 },
   );
 

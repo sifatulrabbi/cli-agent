@@ -13,11 +13,7 @@ const listAvailableProjectsTool = tool(
 );
 
 const searchWithinProjectTool = tool(
-  async ({
-    projectId,
-    queries,
-    format,
-  }: {
+  async ({}: {
     projectId: string;
     queries: string[];
     format: "descriptive" | "concise";
@@ -45,7 +41,7 @@ const searchWithinProjectTool = tool(
 );
 
 const searchWithinLibraryTool = tool(
-  async ({ queries }: { queries: string[] }) => {
+  async ({}: { queries: string[] }) => {
     return "";
   },
   {
@@ -63,7 +59,7 @@ const searchWithinLibraryTool = tool(
 );
 
 const searchInternetTool = tool(
-  async ({ queries }: { queries: string[] }) => {
+  async ({}: { queries: string[] }) => {
     return "";
   },
   {
@@ -76,7 +72,7 @@ const searchInternetTool = tool(
 );
 
 const deepResearchTool = tool(
-  async ({ query }: { query: string }) => {
+  async ({}: { query: string }) => {
     return "";
   },
   {
