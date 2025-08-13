@@ -7,6 +7,7 @@
         "@langchain/core": "^0.3.30",
         "@langchain/langgraph": "^0.2.16",
         "@langchain/openai": "^0.6.3",
+        "chalk": "^5.5.0",
         "dotenv": "^17.2.1",
         "ink": "^6.1.0",
         "ink-text-input": "^6.0.0",

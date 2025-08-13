@@ -4,6 +4,7 @@ import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { TESTING_DIR, ACTIVE_PROJECT_DIR } from "./configs";
 import { tryCatch } from "./utils";
+import chalk from "chalk";
 
 const projectRootDir = path.join(TESTING_DIR, ACTIVE_PROJECT_DIR);
 
@@ -41,6 +42,11 @@ async function traverseDir(dirPath: string, depth = 0) {
 
 export const listProjectFilesTool = tool(
   async () => {
+    console.log(
+      chalk.green(
+        `Using list_project_files_and_dirs_tool (dir: ${ACTIVE_PROJECT_DIR}/)...`,
+      ),
+    );
     const entries = await traverseDir(projectRootDir);
     return `<project-entries>\n${entries
       .map((e) => `${ACTIVE_PROJECT_DIR}${e}`)
@@ -64,6 +70,11 @@ export const createEntityTool = tool(
     entityName: string;
     content: string;
   }) => {
+    console.log(
+      chalk.green(
+        `Using create_entity_tool (target: ${entityName}, type: ${entityType})...`,
+      ),
+    );
     // check if the entity already exists
     const entityPath = buildPathFromRootDir(entityName);
     const { data: isADir } = await tryCatch(() => fs.readdir(entityPath));
@@ -106,6 +117,10 @@ export const createEntityTool = tool(
 
 export const removeEntityTool = tool(
   async ({ entityPath }: { entityPath: string }) => {
+    console.log(
+      chalk.green(`Using remove_entity_tool (target: ${entityPath})...`),
+    );
+
     const fullPath = buildPathFromRootDir(entityPath);
     const { data: isADir } = await tryCatch(() => fs.stat(fullPath));
     if (isADir) {
@@ -139,6 +154,12 @@ export const insertIntoTextFileTool = tool(
     filePath: string;
     inserts: { insertAfter: number; content: string }[];
   }) => {
+    console.log(
+      chalk.green(
+        `Using insert_into_text_file_tool (file: ${filePath}, inserts: ${inserts.length})...`,
+      ),
+    );
+
     const fullPath = buildPathFromRootDir(filePath);
     const { data: fileContent, error: readError } = await tryCatch(() =>
       fs.readFile(fullPath, "utf-8"),
@@ -204,6 +225,12 @@ export const patchTextFileTool = tool(
       content: string;
     }[];
   }) => {
+    console.log(
+      chalk.green(
+        `Using patch_text_file_tool (file: ${filePath}, patches: ${patches.length})...`,
+      ),
+    );
+
     const fullPath = buildPathFromRootDir(filePath);
     const { data: fileContent, error: readError } = await tryCatch(() =>
       fs.readFile(fullPath, "utf-8"),
@@ -298,6 +325,38 @@ export const patchTextFileTool = tool(
         .describe(
           "The patches to apply on the file. Each patch replaces the specified existing range.",
         ),
+    }),
+  },
+);
+
+export const readFilesTool = tool(
+  async ({ filePaths }: { filePaths: string[] }) => {
+    console.log(
+      chalk.green(`Using read_files_tool (files: ${filePaths.join(", ")})...`),
+    );
+    const fullPaths = filePaths.map((filePath) =>
+      buildPathFromRootDir(filePath),
+    );
+    const { data: fileContents } = await tryCatch(() =>
+      Promise.all(fullPaths.map((fullPath) => fs.readFile(fullPath, "utf-8"))),
+    );
+    if (fileContents === null) {
+      return `The '${filePaths.join(
+        ", ",
+      )}' files do not exist or could not be read.`;
+    }
+    const sections = filePaths.map((originalPath, index) => {
+      const content = fileContents[index] ?? "";
+      return `File: ${originalPath}\n${content}`;
+    });
+    return sections.join("\n\n");
+  },
+  {
+    name: "read_files_tool",
+    description:
+      "Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)",
+    schema: z.object({
+      filePaths: z.array(z.string()).describe("The paths of the files to read"),
     }),
   },
 );
