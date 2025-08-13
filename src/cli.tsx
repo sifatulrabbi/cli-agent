@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { render, Box, Text, useApp, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import { HumanMessage, isAIMessageChunk } from "@langchain/core/messages";
-import { graph, ensureGeneratedDir } from "./agent.js";
+import { graph, ensureGeneratedDir, clearTodos } from "./agent.js";
 
 type Role = "user" | "assistant" | "tool";
 type ChatItem = { role: Role; text: string };
 
-const toText = (content: unknown): string => {
+function toText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
@@ -15,19 +15,21 @@ const toText = (content: unknown): string => {
       .join("");
   }
   return "";
-};
+}
 
-const createChatItem = (role: Role, text: string): ChatItem => ({ role, text });
+function createChatItem(role: Role, text: string): ChatItem {
+  return { role, text };
+}
 
-const getMessageType = (m: any): string | undefined => {
+function getMessageType(m: any): string | undefined {
   try {
     if (typeof m?.getType === "function") return m.getType();
   } catch {}
   if (typeof m?.type === "string") return m.type;
   return undefined;
-};
+}
 
-const getToolNameFromMessage = (m: any): string | undefined => {
+function getToolNameFromMessage(m: any): string | undefined {
   if (!m || typeof m !== "object") return undefined;
   if (typeof (m as any).name === "string") return (m as any).name;
   const ak = (m as any).additional_kwargs;
@@ -35,11 +37,11 @@ const getToolNameFromMessage = (m: any): string | undefined => {
     return ak.tool_name;
   }
   return undefined;
-};
+}
 
-const readToolCallsFromAIMessage = (
+function readToolCallsFromAIMessage(
   m: any,
-): Array<{ id?: string; name?: string }> => {
+): Array<{ id?: string; name?: string }> {
   const out: Array<{ id?: string; name?: string }> = [];
   if (!m || typeof m !== "object") return out;
   const ak = (m as any).additional_kwargs;
@@ -61,28 +63,29 @@ const readToolCallsFromAIMessage = (
     }
   }
   return out;
-};
+}
 
-const Divider = () => {
+function Divider() {
   const { stdout } = useStdout();
   const width = stdout?.columns ?? 80;
   return <Text color="blue">{"─".repeat(width)}</Text>;
-};
+}
 
-const Message = ({ role, text }: ChatItem) => {
+function Message({ role, text }: ChatItem) {
   const label =
     role === "user" ? "You> " : role === "tool" ? "Tool> " : "Agent> ";
+  const textColor = role === "tool" ? "gray" : undefined;
   return (
     <Box marginBottom={1}>
       <Text>
         <Text color="blue">{label}</Text>
-        <Text>{text}</Text>
+        <Text color={textColor}>{text}</Text>
       </Text>
     </Box>
   );
-};
+}
 
-const App = () => {
+function App() {
   const { exit } = useApp();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,12 +95,21 @@ const App = () => {
     void ensureGeneratedDir();
   }, []);
 
-  const submit = async (value: string) => {
+  async function submit(value: string) {
     const trimmed = value.trim();
     setInput("");
     if (!trimmed) return;
-    if (["exit", "quit", "q"].includes(trimmed.toLowerCase())) {
+
+    if (trimmed.toLowerCase() === "/exit") {
       exit();
+      return;
+    }
+
+    if (trimmed.toLowerCase() === "/clear") {
+      setItems([]);
+      try {
+        await clearTodos();
+      } catch {}
       return;
     }
 
@@ -106,13 +118,13 @@ const App = () => {
 
     try {
       let aiIndex = -1;
-      const ensureAssistant = () => {
+      function ensureAssistant() {
         if (aiIndex >= 0) return;
         setItems((prev) => {
           aiIndex = prev.length;
           return [...prev, { role: "assistant", text: "" }];
         });
-      };
+      }
 
       const announcedToolKeys: Set<string> = new Set();
 
@@ -217,7 +229,7 @@ const App = () => {
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
     <Box flexDirection="column">
@@ -236,11 +248,13 @@ const App = () => {
           onChange={setInput}
           onSubmit={submit}
           focus={!busy}
-          placeholder={busy ? "" : "Type a message, or 'exit' to quit"}
+          placeholder={
+            busy ? "" : "Type a message, or '/exit' to quit, '/clear' to clear"
+          }
         />
       </Box>
     </Box>
   );
-};
+}
 
 render(<App />);

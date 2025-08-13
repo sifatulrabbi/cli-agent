@@ -4,20 +4,33 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SystemMessage } from "@langchain/core/messages";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 
 const cfg = dotenv.config({ path: ".env" });
 
 const GENERATED_DIR = path.resolve(process.cwd(), "generated");
+const TODOS_FILE = path.resolve(GENERATED_DIR, "todos", "todos.json");
 
-export const ensureGeneratedDir = async () => {
+export async function ensureGeneratedDir() {
   try {
     await fs.mkdir(GENERATED_DIR, { recursive: true });
+    await fs.mkdir(path.resolve(GENERATED_DIR, "todos"), { recursive: true });
+    try {
+      await fs.access(TODOS_FILE);
+    } catch {
+      await fs.writeFile(TODOS_FILE, "[]", "utf8");
+    }
   } catch {}
-};
+}
 
-const resolveGeneratedPath = (name: string) => {
+export async function clearTodos() {
+  await ensureGeneratedDir();
+  await fs.writeFile(TODOS_FILE, "[]", "utf8");
+}
+
+function resolveGeneratedPath(name: string) {
   if (!name || typeof name !== "string") throw new Error("Invalid filename");
   if (path.isAbsolute(name)) throw new Error("Absolute paths are not allowed");
   const normalized = path.normalize(name);
@@ -29,12 +42,12 @@ const resolveGeneratedPath = (name: string) => {
     throw new Error("Path traversal is not allowed");
   }
   return resolved;
-};
+}
 
-const listFilesRecursive = async (
+async function listFilesRecursive(
   dir: string,
   base: string,
-): Promise<string[]> => {
+): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
@@ -48,7 +61,7 @@ const listFilesRecursive = async (
     files.push(relative);
   }
   return files;
-};
+}
 
 const fileModificationTool = tool(
   async ({
@@ -125,7 +138,129 @@ const readFilesTool = tool(
   },
 );
 
-const tools = [fileModificationTool, listAvailableFilesTool, readFilesTool];
+interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const todoListTool = tool(
+  async ({
+    operation,
+    text,
+    todoId,
+    done,
+  }: {
+    operation: "add" | "update_status" | "list";
+    text?: string;
+    todoId?: string;
+    done?: boolean;
+  }) => {
+    await ensureGeneratedDir();
+
+    let todos: TodoItem[] = [];
+    try {
+      const existingData = await fs.readFile(TODOS_FILE, "utf8");
+      todos = JSON.parse(existingData);
+    } catch {
+      todos = [];
+    }
+
+    if (operation === "list") {
+      return JSON.stringify({
+        status: "success",
+        todos,
+        count: todos.length,
+      });
+    }
+
+    if (operation === "add") {
+      if (!text || typeof text !== "string") {
+        return JSON.stringify({
+          status: "error",
+          message: "Text is required for adding a todo",
+        });
+      }
+
+      const newTodo: TodoItem = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        text,
+        done: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      todos.push(newTodo);
+      await fs.writeFile(TODOS_FILE, JSON.stringify(todos, null, 2), "utf8");
+
+      return JSON.stringify({
+        status: "success",
+        message: "Todo added successfully",
+        todo: newTodo,
+      });
+    }
+
+    if (operation === "update_status") {
+      if (!todoId || typeof todoId !== "string") {
+        return JSON.stringify({
+          status: "error",
+          message: "Todo ID is required for updating status",
+        });
+      }
+
+      if (typeof done !== "boolean") {
+        return JSON.stringify({
+          status: "error",
+          message: "Done status (boolean) is required for updating",
+        });
+      }
+
+      const todoIndex = todos.findIndex((t) => t.id === todoId);
+      if (todoIndex === -1) {
+        return JSON.stringify({
+          status: "error",
+          message: `Todo with ID ${todoId} not found`,
+        });
+      }
+
+      todos[todoIndex].done = done;
+      todos[todoIndex].updatedAt = new Date().toISOString();
+
+      await fs.writeFile(TODOS_FILE, JSON.stringify(todos, null, 2), "utf8");
+
+      return JSON.stringify({
+        status: "success",
+        message: "Todo status updated successfully",
+        todo: todos[todoIndex],
+      });
+    }
+
+    return JSON.stringify({
+      status: "error",
+      message: "Invalid operation",
+    });
+  },
+  {
+    name: "todo_list_tool",
+    description:
+      "Manage a todo list. Operations: 'add' (requires text), 'update_status' (requires todoId and done boolean), 'list' (no additional params).",
+    schema: z.object({
+      operation: z.enum(["add", "update_status", "list"]),
+      text: z.string().optional(),
+      todoId: z.string().optional(),
+      done: z.boolean().optional(),
+    }),
+  },
+);
+
+const tools = [
+  fileModificationTool,
+  listAvailableFilesTool,
+  readFilesTool,
+  todoListTool,
+];
 
 const model = new ChatOpenAI({
   apiKey: cfg.parsed?.OPENAI_API_KEY,
@@ -139,7 +274,7 @@ const model = new ChatOpenAI({
 });
 const modelWithTools = model.bindTools(tools);
 
-export const extractReasoningText = (msg: any): string | null => {
+export function extractReasoningText(msg: any): string | null {
   const reasoning = msg?.additional_kwargs?.reasoning;
   if (!reasoning) return null;
   const summary = Array.isArray(reasoning.summary) ? reasoning.summary : [];
@@ -155,12 +290,33 @@ export const extractReasoningText = (msg: any): string | null => {
   } catch {
     return null;
   }
-};
+}
 
-const callModel = async (state: typeof MessagesAnnotation.State) => {
-  const response = await modelWithTools.invoke(state.messages);
+async function callModel(state: typeof MessagesAnnotation.State) {
+  await ensureGeneratedDir();
+
+  const data = await fs.readFile(TODOS_FILE, "utf8");
+  const todos: Array<{ id: string; text: string; done: boolean }> =
+    JSON.parse(data);
+  const formatted = todos
+    .map((t, i) => `${i + 1}. [${t.done ? "x" : " "}] ${t.text} (id:${t.id})`)
+    .join("\n")
+    .trim();
+
+  const systemPrefix = new SystemMessage(
+    `
+You are an intelligent AI assistant who helps the user build automations and scripts using various programming languages. When planning and executing long or complex tasks, always break them down into smaller steps and use the 'todo_list_tool' to manage these steps in a step-by-step manner. Update the todo list as you work through the tasks.
+
+=== TODOs ===
+${formatted ? `Your active TODOs:\n${formatted}` : "No active TODOs."}
+`.trim(),
+  );
+
+  const messages = [systemPrefix, ...state.messages];
+
+  const response = await modelWithTools.invoke(messages);
   return { messages: [response] };
-};
+}
 
 const toolNode = new ToolNode(tools);
 

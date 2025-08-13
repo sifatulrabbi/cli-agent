@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "dev": "tsc && node dist/cli.js",
+    "dev": "tsc && node dist/mycli.js",
     "clean": "rm -rf dist"
   },
   "dependencies": {
