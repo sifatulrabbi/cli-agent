@@ -1,5 +1,5 @@
-import React from "react";
-import { render, Box, Text, useApp, useStdout, useInput } from "ink";
+import React, { useEffect } from "react";
+import { render, Box, Text, useApp, useStdout, useInput, useStderr } from "ink";
 import TextInput from "ink-text-input";
 import {
   AIMessage,
@@ -217,11 +217,13 @@ const MemoMessageView = React.memo(MessageView);
 
 const App: React.FC = () => {
   const { exit } = useApp();
+  const { stderr } = useStderr();
   const [messages, setMessages] = React.useState<
     Array<AIMessage | HumanMessage | ToolMessage>
   >(loadHistory(HISTORY_PATH));
   const [input, setInput] = React.useState("");
   const [busyStatus, setBusyStatus] = React.useState<string | null>(null);
+  const [stdError, setStdError] = React.useState<string | null>(null);
 
   const onSubmit = (v: string) => {
     const trimmed = v.trim();
@@ -257,6 +259,12 @@ const App: React.FC = () => {
 
   useInput(() => {});
 
+  useEffect(() => {
+    stderr?.on("data", (data) => {
+      setStdError(data.toString());
+    });
+  }, [stderr]);
+
   return (
     <FullHeight>
       <Box height={1} flexShrink={0}>
@@ -283,6 +291,12 @@ const App: React.FC = () => {
         ))}
         <Box flexGrow={1} />
       </Box>
+
+      {stdError ? (
+        <Box flexDirection="column" flexGrow={1}>
+          <Text color="red">{stdError}</Text>
+        </Box>
+      ) : null}
 
       <Box height={1} flexShrink={0}>
         <Text color="gray" wrap="truncate-end">

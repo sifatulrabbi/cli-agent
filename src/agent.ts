@@ -5,12 +5,14 @@ import {
   BaseMessage,
   ToolMessage,
   AIMessage,
+  AIMessageChunk,
 } from "@langchain/core/messages";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { toolsCondition } from "@langchain/langgraph/prebuilt";
 import { DynamicStructuredTool } from "langchain/tools";
 import fs from "fs";
 import { tryCatch } from "@/utils";
+import { concat } from "@langchain/core/utils/stream";
 
 export type DebuggerAgentOptions = {
   historyPath: string;
@@ -81,9 +83,9 @@ function callModelFactory(
   return async function (state: typeof MessagesAnnotation.State) {
     updateHistory(state.messages, "thinking...");
 
-    const messages = [sysMsg, ...state.messages];
-    const response = await llm.bindTools(tools).invoke(
-      messages.map((msg) => {
+    const messages = [
+      sysMsg,
+      ...state.messages.map((msg) => {
         if (msg.getType() === "ai") {
           const aiMsg = msg as AIMessage;
           if (aiMsg.additional_kwargs?.reasoning) {
@@ -92,8 +94,30 @@ function callModelFactory(
         }
         return msg;
       }),
-    );
-    return { messages: [response] };
+    ];
+
+    try {
+      const stream = await llm.bindTools(tools).stream(messages);
+      let response: AIMessageChunk | undefined = undefined;
+      for await (const chunk of stream) {
+        response = response !== undefined ? concat(response, chunk) : chunk;
+        if (response) {
+          updateHistory([...state.messages, response], `thinking...`);
+        }
+      }
+
+      if (!response) throw new Error("No response from model");
+      response.tool_calls = response.tool_calls?.map((tc) => ({
+        ...tc,
+        args: JSON.parse((tc.args as unknown as string) ?? "{}"),
+      }));
+      return { messages: [response] };
+    } catch (error) {
+      console.error(error);
+      return {
+        messages: [new AIMessage({ content: "Error: " + String(error) })],
+      };
+    }
   };
 }
 
@@ -123,6 +147,7 @@ function customToolNode(
             error: error ? String(error) : undefined,
           },
         });
+        console.error(error);
         toolMessages.push(msg);
       }
     }
