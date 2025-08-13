@@ -59,6 +59,38 @@ export const listProjectFilesTool = tool(
   },
 );
 
+export const readFilesTool = tool(
+  async ({ filePaths }: { filePaths: string[] }) => {
+    console.log(
+      chalk.green(`Using read_files_tool (files: ${filePaths.join(", ")})...`),
+    );
+    const fullPaths = filePaths.map((filePath) =>
+      buildPathFromRootDir(filePath),
+    );
+    const { data: fileContents } = await tryCatch(() =>
+      Promise.all(fullPaths.map((fullPath) => fs.readFile(fullPath, "utf-8"))),
+    );
+    if (fileContents === null) {
+      return `The '${filePaths.join(
+        ", ",
+      )}' files do not exist or could not be read.`;
+    }
+    const sections = filePaths.map((originalPath, index) => {
+      const content = fileContents[index] ?? "";
+      return `File: ${originalPath}\n${content}`;
+    });
+    return sections.join("\n\n");
+  },
+  {
+    name: "read_files_tool",
+    description:
+      "Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)",
+    schema: z.object({
+      filePaths: z.array(z.string()).describe("The paths of the files to read"),
+    }),
+  },
+);
+
 export const createEntityTool = tool(
   async ({
     entityType,
@@ -92,9 +124,10 @@ export const createEntityTool = tool(
     } else {
       await fs.writeFile(entityPath, content);
     }
+    const entireProjectList = await listProjectFilesTool.invoke({});
     return `The '${entityName}' ${entityType} has been created${
       entityType === "dir" ? "." : "with the content."
-    }`;
+    }\n\n${entireProjectList}`;
   },
   {
     name: "create_entity_tool",
@@ -125,13 +158,15 @@ export const removeEntityTool = tool(
     const { data: isADir } = await tryCatch(() => fs.stat(fullPath));
     if (isADir) {
       await fs.rmdir(fullPath, { recursive: true });
-      return `The '${entityPath}' directory has been removed.`;
+      const entireProjectList = await listProjectFilesTool.invoke({});
+      return `The '${entityPath}' directory has been removed.\n\n${entireProjectList}`;
     }
 
     const { data: isAFile } = await tryCatch(() => fs.readFile(fullPath));
     if (isAFile) {
       await fs.unlink(fullPath);
-      return `The '${entityPath}' file has been removed.`;
+      const entireProjectList = await listProjectFilesTool.invoke({});
+      return `The '${entityPath}' file has been removed.\n\n${entireProjectList}`;
     }
 
     return `The '${entityPath}' does not exist.`;
@@ -193,7 +228,9 @@ export const insertIntoTextFileTool = tool(
       console.error(writeError);
       return `Failed to write changes to '${filePath}'.`;
     }
-    return `Inserted ${lines.length} line(s) into '${filePath}'.`;
+
+    const updatedFile = await readFilesTool.invoke({ filePaths: [filePath] });
+    return `Inserted ${lines.length} line(s) into '${filePath}'.\n\nHere is the updated file:\n\n${updatedFile}`;
   },
   {
     name: "insert_into_text_file_tool",
@@ -298,7 +335,8 @@ export const patchTextFileTool = tool(
       return `Failed to write changes to '${filePath}'.`;
     }
 
-    return `Applied ${patches.length} patch(es) to '${filePath}'.`;
+    const updatedFile = await readFilesTool.invoke({ filePaths: [filePath] });
+    return `Applied ${patches.length} patch(es) to '${filePath}'.\n\nHere is the updated file:\n\n${updatedFile}`;
   },
   {
     name: "patch_text_file_tool",
@@ -329,42 +367,11 @@ export const patchTextFileTool = tool(
   },
 );
 
-export const readFilesTool = tool(
-  async ({ filePaths }: { filePaths: string[] }) => {
-    console.log(
-      chalk.green(`Using read_files_tool (files: ${filePaths.join(", ")})...`),
-    );
-    const fullPaths = filePaths.map((filePath) =>
-      buildPathFromRootDir(filePath),
-    );
-    const { data: fileContents } = await tryCatch(() =>
-      Promise.all(fullPaths.map((fullPath) => fs.readFile(fullPath, "utf-8"))),
-    );
-    if (fileContents === null) {
-      return `The '${filePaths.join(
-        ", ",
-      )}' files do not exist or could not be read.`;
-    }
-    const sections = filePaths.map((originalPath, index) => {
-      const content = fileContents[index] ?? "";
-      return `File: ${originalPath}\n${content}`;
-    });
-    return sections.join("\n\n");
-  },
-  {
-    name: "read_files_tool",
-    description:
-      "Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)",
-    schema: z.object({
-      filePaths: z.array(z.string()).describe("The paths of the files to read"),
-    }),
-  },
-);
-
 export const toolsSet1 = [
   listProjectFilesTool,
   createEntityTool,
   removeEntityTool,
   patchTextFileTool,
   insertIntoTextFileTool,
+  readFilesTool,
 ];

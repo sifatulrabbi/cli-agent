@@ -1,0 +1,78 @@
+[
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "HumanMessage"
+    ],
+    "kwargs": {
+      "content": "\nHello! how can you help me?\n",
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "171584d3-da7b-4606-9841-bd82c17785ab"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "id": "msg_689c4a7239308190a60cbe9c06f7b34705571e484c299939",
+      "content": [
+        {
+          "type": "text",
+          "text": "I can scaffold a complete, runnable application end-to-end—from directory structure to source code to build and run scripts—plus a full README with copy-&-paste instructions. \n\nTo get started, could you tell me:\n\n1. What kind of application are you looking to build?  \n   • Web frontend (e.g. React, Vue)  \n   • Backend/API (e.g. Node/Express, Python/Flask, Go)  \n   • Full-stack (frontend + backend)  \n   • CLI tool, library, mobile app, etc.\n\n2. Which language or framework do you prefer?  \n   • JavaScript/TypeScript (Node, React, Next.js)  \n   • Python (Django, Flask, FastAPI)  \n   • Java, Go, Ruby, etc.  \n\n3. Any specific features or integrations?  \n   • Database (PostgreSQL, MongoDB, SQLite)  \n   • Authentication, real-time (WebSocket), file uploads, scheduling  \n   • Docker, testing suite, CI/CD  \n\n4. Which package manager or build tools?  \n   • npm, yarn, pnpm  \n   • Bundler (Webpack, Vite), transpiler (Babel, TypeScript)  \n\nOnce I have those details, I’ll propose a concise plan, scaffold the project structure, implement the code, and deliver a comprehensive README so you can jump straight to running it.",
+          "annotations": []
+        }
+      ],
+      "tool_calls": [],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "input_tokens": 1433,
+        "input_tokens_details": {
+          "cached_tokens": 0
+        },
+        "output_tokens": 489,
+        "output_tokens_details": {
+          "reasoning_tokens": 192
+        },
+        "total_tokens": 1922
+      },
+      "additional_kwargs": {
+        "reasoning": {
+          "id": "rs_689c4a6de91c81909ebfeabe376454db05571e484c299939",
+          "type": "reasoning",
+          "summary": [
+            {
+              "type": "summary_text",
+              "text": "**Clarifying capabilities**\n\nThe user greets me and likely wants to understand how I can assist them. I should clarify their needs first by asking about the type of application they want to build, whether it's a web app, API, or CLI. I could explain that I can help scaffold applications using different tech stacks like Node.js, Python, Java, or frameworks like React and Angular. I'll ask, \"What kind of application are you looking to create, and what features or technologies do you prefer?\""
+            }
+          ]
+        }
+      },
+      "response_metadata": {
+        "id": "resp_689c4a6cfad081908f06d5153353811805571e484c299939",
+        "estimatedTokenUsage": {
+          "promptTokens": 1433,
+          "completionTokens": 489,
+          "totalTokens": 1922
+        },
+        "model": "o4-mini-2025-04-16",
+        "created_at": 1755073133,
+        "incomplete_details": null,
+        "metadata": {},
+        "object": "response",
+        "status": "completed",
+        "user": null,
+        "service_tier": "default",
+        "model_name": "o4-mini-2025-04-16"
+      }
+    }
+  }
+]

@@ -1,17 +1,25 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { SystemMessage, HumanMessage } from "@langchain/core/messages";
+import {
+  SystemMessage,
+  HumanMessage,
+  BaseMessage,
+  ToolMessage,
+  AIMessage,
+} from "@langchain/core/messages";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 import { DynamicStructuredTool } from "langchain/tools";
 import chalk from "chalk";
+import fs from "fs";
 
 export type DebuggerAgentOptions = {
+  historyPath: string;
   systemInstruction?: string;
 };
 
 function defaultSystemInstruction(): string {
   return `
-You are a senior coding assistant that builds runnable applications end-to-end using the provided filesystem tools. You must deliver:
+You are a coding assistant that builds runnable applications end-to-end using the provided filesystem tools. You must deliver:
 1) a working codebase created entirely via tools
 2) a README.md at the project root with complete step-by-step instructions to run the app.
 
@@ -24,6 +32,7 @@ General rules
 - Prefer writing complete files in one go; only patch/insert when necessary.
 - After each tool call, read its result and adapt accordingly.
 - Be explicit and deterministic. Avoid ambiguous steps or partial instructions.
+- Inform the user about what you just accomplished and what you are about to do next, especially during tool calls. However, do not stop for getting user's approval or feedback.
 
 Tools available (from @toolsSet1.ts)
 - list_project_files_and_dirs_tool()
@@ -87,6 +96,7 @@ Conventions
 - Indentation/EOL: preserve whatever is in the file; do not convert tabs/spaces or newline style.
 - Safety: avoid destructive changes unless requested; prefer additive changes.
 - Output: keep chat responses concise and operational; rely on tools for actual file changes.
+- Informing the user: inform the user about what you just accomplished and what you are about to do next, especially during tool calls. However, do not stop for getting user's approval or feedback.
 
 Your objective is to produce a runnable app and a crystal-clear README.md that enables the user to set up and run the app without additional help.
 `.trim();
@@ -97,14 +107,12 @@ function callModelFactory(
   sysMsg: SystemMessage,
   tools: DynamicStructuredTool[],
 ) {
-  function extractDisplayParts(message: any) {
+  function extractDisplayParts(message: AIMessage) {
     const toolNamesSet = new Set<string>();
     let thinking = "";
     let reply = "";
 
-    // Collect tool calls from standardized locations
-    const toolCalls =
-      message?.tool_calls || message?.additional_kwargs?.tool_calls;
+    const toolCalls = message?.tool_calls;
     if (Array.isArray(toolCalls)) {
       for (const tc of toolCalls) {
         if (tc?.name) toolNamesSet.add(tc.name);
@@ -114,29 +122,8 @@ function callModelFactory(
     const content = message?.content;
     if (Array.isArray(content)) {
       for (const part of content) {
-        const type = (part as any)?.type;
-        if (
-          type === "reasoning" ||
-          type === "thinking" ||
-          type === "internal_monologue"
-        ) {
-          const text = (part as any)?.text ?? (part as any)?.reasoning ?? "";
-          if (typeof text === "string") thinking += text;
-        } else if (type === "tool_use" || type === "tool_call") {
-          const name = (part as any)?.name;
-          if (typeof name === "string" && name.length > 0)
-            toolNamesSet.add(name);
-        } else if (type === "text") {
-          const text = (part as any)?.text;
-          if (typeof text === "string") reply += text;
-        } else if (typeof part === "string") {
-          reply += part;
-        } else if (
-          part &&
-          typeof part === "object" &&
-          typeof (part as any).text === "string"
-        ) {
-          reply += (part as any).text;
+        if (part?.type === "text") {
+          reply += part?.text ?? "";
         }
       }
     } else if (typeof content === "string") {
@@ -149,6 +136,17 @@ function callModelFactory(
       reply = (content as any).text;
     }
 
+    if (message.additional_kwargs?.reasoning) {
+      const reasoning: any = message.additional_kwargs.reasoning;
+      if (reasoning.summary) {
+        for (const part of reasoning.summary) {
+          if (part?.type === "summary_text") {
+            thinking += part?.text ?? "";
+          }
+        }
+      }
+    }
+
     return {
       toolNames: Array.from(toolNamesSet),
       thinking: thinking.trim(),
@@ -159,12 +157,7 @@ function callModelFactory(
   return async function (state: typeof MessagesAnnotation.State) {
     const messages = [sysMsg, ...state.messages];
     console.log(chalk.blue("Invoking the LLM..."));
-    const response = await llm
-      .bindTools([
-        ...tools,
-        { type: "web_search_preview", search_context_size: "low" },
-      ])
-      .invoke(messages);
+    const response = await llm.bindTools(tools).invoke(messages);
 
     // Pretty-print the response parts to the terminal
     const { toolNames, thinking, reply } = extractDisplayParts(response as any);
@@ -181,30 +174,79 @@ function callModelFactory(
   };
 }
 
+function syncHistory(historyPath: string, messages: BaseMessage[]) {
+  fs.writeFileSync(
+    historyPath,
+    JSON.stringify(
+      messages.map((msg) => msg.toJSON()),
+      null,
+      2,
+    ),
+  );
+}
+
 export async function invokeDebuggerAgent(
   llm: ChatOpenAI,
   userInput: string,
   tools: DynamicStructuredTool[],
-  options?: DebuggerAgentOptions,
+  options: DebuggerAgentOptions,
 ) {
   const system = new SystemMessage({
-    content: (options?.systemInstruction ?? defaultSystemInstruction()).trim(),
+    content: (options.systemInstruction ?? defaultSystemInstruction()).trim(),
   });
   const toolNode = new ToolNode(tools);
+  let history: BaseMessage[] = [];
+
+  if (fs.existsSync(options.historyPath)) {
+    try {
+      const raw = fs.readFileSync(options.historyPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        history = parsed.map((entry: any) => {
+          const typeId: string | undefined = entry?.id?.[2];
+          const kwargs = entry?.kwargs ?? {};
+          switch (typeId) {
+            case "HumanMessage":
+              return new HumanMessage(kwargs);
+            case "AIMessage":
+              return new AIMessage(kwargs);
+            case "ToolMessage":
+              return new ToolMessage(kwargs);
+            case "SystemMessage":
+              return new SystemMessage(kwargs);
+            default:
+              throw new Error(
+                `Unsupported message type in history: ${String(typeId)}`,
+              );
+          }
+        });
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to load prior history from ${options.historyPath}. Proceeding with empty history.`,
+        err,
+      );
+      history = [];
+    }
+  }
 
   const graph = new StateGraph(MessagesAnnotation)
     .addNode("llm", callModelFactory(llm, system, tools))
     .addNode("tools", toolNode)
     .addEdge(START, "llm")
-    .addConditionalEdges("llm", toolsCondition)
+    .addConditionalEdges("llm", (state) => {
+      syncHistory(options.historyPath, state.messages);
+      return toolsCondition(state);
+    })
     .addEdge("tools", "llm")
     .compile();
 
   const result = await graph.invoke(
-    { messages: [new HumanMessage(userInput)] },
+    { messages: [...history, new HumanMessage(userInput)] },
     { recursionLimit: 10 ** 10 },
   );
+
+  syncHistory(options.historyPath, result.messages);
+
   return result;
 }
-
-export const debuggerAgent = {};
