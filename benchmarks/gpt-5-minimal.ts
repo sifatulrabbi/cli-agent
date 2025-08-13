@@ -14,4 +14,4 @@ const llm = new ChatOpenAI({
 
 const historyPath = `benchmarks/results/gpt-5-minimal.json`;
 ensureHistoryFileExists(historyPath);
-await invokeAgent(llm, toolsSet1, { historyPath });
+await invokeAgent(llm, toolsSet1, { historyPath }, () => {});

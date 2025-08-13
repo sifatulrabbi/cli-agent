@@ -13,4 +13,4 @@ const llm = new ChatOpenAI({
 
 const historyPath = `benchmarks/results/z-ai-glm-4.5.json`;
 ensureHistoryFileExists(historyPath);
-await invokeAgent(llm, toolsSet1, { historyPath });
+await invokeAgent(llm, toolsSet1, { historyPath }, () => {});

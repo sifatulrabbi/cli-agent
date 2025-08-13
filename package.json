@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "dev": "tsc && node dist/mycli.js",
+    "dev": "node --import tsx src/cli.tsx",
     "clean": "rm -rf dist",
     "test": "node --import tsx --test src/__tests__/**/*.test.ts",
     "test:watch": "node --watch --import tsx --test src/__tests__/**/*.test.ts"

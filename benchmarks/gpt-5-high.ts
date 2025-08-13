@@ -1,17 +1,21 @@
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatOpenAIResponses } from "@langchain/openai";
 import { toolsSet1 } from "@/toolsSet1";
 import { invokeDebuggerAgent as invokeAgent } from "@/agent";
 import { ensureHistoryFileExists } from "@/utils";
 
-const llm = new ChatOpenAI({
+const llmV2 = new ChatOpenAIResponses({
   model: "gpt-5",
-  useResponsesApi: true,
   reasoning: {
     effort: "high",
-    summary: "auto",
+    summary: "detailed",
   },
 });
 
 const historyPath = `benchmarks/results/gpt-5-high.json`;
 ensureHistoryFileExists(historyPath);
-await invokeAgent(llm, toolsSet1, { historyPath, trimReasoning: false });
+await invokeAgent(
+  llmV2,
+  toolsSet1,
+  { historyPath, trimReasoning: false },
+  () => {},
+);
