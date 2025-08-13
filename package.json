@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@langchain/core": "^0.3.30",
-    "@langchain/langgraph": "^0.2.16",
-    "@langchain/openai": "^0.6.3",
+    "@langchain/langgraph": "^0.4.4",
+    "@langchain/openai": "^0.6.7",
     "chalk": "^5.5.0",
     "dotenv": "^17.2.1",
     "ink": "^6.1.0",

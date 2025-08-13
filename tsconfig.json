@@ -19,13 +19,13 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"]
     },
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "benchmarks/**/*.ts"],
+  "exclude": ["node_modules", "dist", "testBench"]
 }

@@ -1,0 +1,337 @@
+[
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "HumanMessage"
+    ],
+    "kwargs": {
+      "content": "\nBuild me a todo app using React 18 and Tailwind CSS 3. The todo app should have the following features:\n1) add a todo\n2) delete a todo\n3) mark a todo as complete\n4) display the todos in a list.\nStore/load the todos from the localStorage of the browser.\n\nDO NOT ask for me for follow up questions and start building the app immediately.\n",
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "9b1b2617-06a4-4951-a4a2-926eda392c3f"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "content": "",
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "functions.list_project_files_and_dirs_tool.list_project_files_and_dirs_tool",
+            "function": {
+              "arguments": "{}",
+              "name": "list_project_files_and_dirs_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "response_metadata": {
+        "tokenUsage": {
+          "promptTokens": 1573,
+          "completionTokens": 806,
+          "totalTokens": 2379
+        },
+        "finish_reason": "tool_calls",
+        "model_name": "openai/gpt-oss-20b"
+      },
+      "id": "gen-1755078887-K046rGwnl05D7FVDLPu2",
+      "tool_calls": [
+        {
+          "name": "list_project_files_and_dirs_tool",
+          "args": {},
+          "type": "tool_call",
+          "id": "functions.list_project_files_and_dirs_tool.list_project_files_and_dirs_tool"
+        }
+      ],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "output_tokens": 806,
+        "input_tokens": 1573,
+        "total_tokens": 2379,
+        "input_token_details": {},
+        "output_token_details": {}
+      }
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "ToolMessage"
+    ],
+    "kwargs": {
+      "status": "error",
+      "content": "Error: ENOENT: no such file or directory, scandir '/Users/sifatul/coding/js-playground/testBench/project3'\n Please fix your mistakes.",
+      "name": "list_project_files_and_dirs_tool",
+      "tool_call_id": "functions.list_project_files_and_dirs_tool.list_project_files_and_dirs_tool",
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "c36644f5-f5d7-4cb8-a4ad-63e337e80458"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "content": "",
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "call_dTezqKAX5KpKOF2eeJwfACSD",
+            "type": "function",
+            "function": {
+              "name": "list_project_files_and_dirs_tool",
+              "arguments": "{}"
+            }
+          }
+        ]
+      },
+      "response_metadata": {
+        "tokenUsage": {
+          "promptTokens": 1657,
+          "completionTokens": 96,
+          "totalTokens": 1753
+        },
+        "finish_reason": "tool_calls",
+        "model_name": "openai/gpt-oss-20b"
+      },
+      "id": "gen-1755078892-yngEZlckduw3nHw5BW89",
+      "tool_calls": [
+        {
+          "name": "list_project_files_and_dirs_tool",
+          "args": {},
+          "type": "tool_call",
+          "id": "call_dTezqKAX5KpKOF2eeJwfACSD"
+        }
+      ],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "output_tokens": 96,
+        "input_tokens": 1657,
+        "total_tokens": 1753,
+        "input_token_details": {},
+        "output_token_details": {}
+      }
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "ToolMessage"
+    ],
+    "kwargs": {
+      "status": "error",
+      "content": "Error: ENOENT: no such file or directory, scandir '/Users/sifatul/coding/js-playground/testBench/project3'\n Please fix your mistakes.",
+      "name": "list_project_files_and_dirs_tool",
+      "tool_call_id": "call_dTezqKAX5KpKOF2eeJwfACSD",
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "352b23c6-c514-4800-9e45-8488a27b2aac"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "content": "",
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "functions.create_entity_tool.create_entity_tool",
+            "function": {
+              "arguments": "{\n  \"entityPath\": \"project3\",\n  \"entityType\": \"dir\",\n  \"entityName\": \"project3\",\n  \"content\": \"\"\n}",
+              "name": "create_entity_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "response_metadata": {
+        "tokenUsage": {
+          "promptTokens": 1710,
+          "completionTokens": 336,
+          "totalTokens": 2046
+        },
+        "finish_reason": "tool_calls",
+        "model_name": "openai/gpt-oss-20b"
+      },
+      "id": "gen-1755078894-mPFdYkVeW59dlMgnMwmR",
+      "tool_calls": [
+        {
+          "name": "create_entity_tool",
+          "args": {
+            "entityPath": "project3",
+            "entityType": "dir",
+            "entityName": "project3",
+            "content": ""
+          },
+          "type": "tool_call",
+          "id": "functions.create_entity_tool.create_entity_tool"
+        }
+      ],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "output_tokens": 336,
+        "input_tokens": 1710,
+        "total_tokens": 2046,
+        "input_token_details": {},
+        "output_token_details": {}
+      }
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "ToolMessage"
+    ],
+    "kwargs": {
+      "status": "success",
+      "content": "The 'project3' dir has been created.\n\n<project-entries>\nproject3/project3/\n</project-entries>",
+      "tool_call_id": "functions.create_entity_tool.create_entity_tool",
+      "name": "create_entity_tool",
+      "metadata": {},
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "0d247d97-b51d-451f-9df2-838c78af99ff"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "content": "",
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "create_entity_tool.create_entity_tool",
+            "function": {
+              "arguments": "{\"entityPath\":\"project3\",\"entityType\":\"dir\",\"entityName\":\"project3\",\"content\":\"\"}",
+              "name": "create_entity_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "response_metadata": {
+        "tokenUsage": {
+          "promptTokens": 1779,
+          "completionTokens": 1289,
+          "totalTokens": 3068
+        },
+        "finish_reason": "tool_calls",
+        "model_name": "openai/gpt-oss-20b"
+      },
+      "id": "gen-1755078897-pYgIT7ZzhQRimUEdpeMG",
+      "tool_calls": [
+        {
+          "name": "create_entity_tool",
+          "args": {
+            "entityPath": "project3",
+            "entityType": "dir",
+            "entityName": "project3",
+            "content": ""
+          },
+          "type": "tool_call",
+          "id": "create_entity_tool.create_entity_tool"
+        }
+      ],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "output_tokens": 1289,
+        "input_tokens": 1779,
+        "total_tokens": 3068,
+        "input_token_details": {},
+        "output_token_details": {}
+      }
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "ToolMessage"
+    ],
+    "kwargs": {
+      "status": "success",
+      "content": "The 'project3' directory already exists.",
+      "tool_call_id": "create_entity_tool.create_entity_tool",
+      "name": "create_entity_tool",
+      "metadata": {},
+      "additional_kwargs": {},
+      "response_metadata": {},
+      "id": "fff93043-1aeb-4835-b029-1f5864bfe9b1"
+    }
+  },
+  {
+    "lc": 1,
+    "type": "constructor",
+    "id": [
+      "langchain_core",
+      "messages",
+      "AIMessage"
+    ],
+    "kwargs": {
+      "content": "",
+      "additional_kwargs": {},
+      "response_metadata": {
+        "tokenUsage": {
+          "promptTokens": 1831,
+          "completionTokens": 429,
+          "totalTokens": 2260
+        },
+        "finish_reason": "stop",
+        "model_name": "openai/gpt-oss-20b"
+      },
+      "id": "gen-1755078911-UXbuA2RK0zxRe5RGnxiv",
+      "tool_calls": [],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "output_tokens": 429,
+        "input_tokens": 1831,
+        "total_tokens": 2260,
+        "input_token_details": {},
+        "output_token_details": {}
+      }
+    }
+  }
+]
