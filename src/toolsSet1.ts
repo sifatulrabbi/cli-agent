@@ -8,13 +8,18 @@ import { tryCatch } from "./utils";
 const projectRootDir = path.join(TESTING_DIR, ACTIVE_PROJECT_DIR);
 
 export function buildPathFromRootDir(entryPath: string) {
-  const relativePath = path.relative(projectRootDir, entryPath);
-  return path.join(projectRootDir, relativePath);
+  let sanitizedPath = entryPath;
+  if (entryPath.startsWith("/" + ACTIVE_PROJECT_DIR + "/")) {
+    sanitizedPath = entryPath.replace("/" + ACTIVE_PROJECT_DIR + "/", "/");
+  } else if (entryPath.startsWith(ACTIVE_PROJECT_DIR + "/")) {
+    sanitizedPath = entryPath.replace(ACTIVE_PROJECT_DIR + "/", "/");
+  }
+  return path.join(projectRootDir, sanitizedPath);
 }
 
 async function traverseDir(dirPath: string, depth = 0) {
   const entries = await fs.readdir(dirPath);
-  let formattedEntries = "";
+  const formattedEntries: string[] = [];
 
   for (const entry of entries) {
     const entryPath = path.join(projectRootDir, entry);
@@ -22,11 +27,12 @@ async function traverseDir(dirPath: string, depth = 0) {
       fs.stat(entryPath).then((stat) => stat.isDirectory()),
     );
 
-    if (formattedEntries.trim()) formattedEntries += `\n`;
-    formattedEntries += `${"  ".repeat(depth)}${ACTIVE_PROJECT_DIR}/${entry}`;
     if (isDirectory) {
-      formattedEntries += `/`;
-      formattedEntries += await traverseDir(entryPath, depth + 1);
+      formattedEntries.push(`/${entry}/`);
+      const subEntries = await traverseDir(entryPath, depth + 1);
+      formattedEntries.push(...subEntries.map((e) => `/${entry}${e}`));
+    } else {
+      formattedEntries.push(`/${entry}`);
     }
   }
 
@@ -36,7 +42,9 @@ async function traverseDir(dirPath: string, depth = 0) {
 export const listProjectFilesTool = tool(
   async () => {
     const entries = await traverseDir(projectRootDir);
-    return `<project-entries>\n${entries}\n</project-entries>`;
+    return `<project-entries>\n${entries
+      .map((e) => `${ACTIVE_PROJECT_DIR}${e}`)
+      .join("\n")}\n</project-entries>`;
   },
   {
     name: "list_project_files_and_dirs_tool",
@@ -75,7 +83,7 @@ export const createEntityTool = tool(
     }
     return `The '${entityName}' ${entityType} has been created${
       entityType === "dir" ? "." : "with the content."
-    }.`;
+    }`;
   },
   {
     name: "create_entity_tool",
@@ -123,6 +131,67 @@ export const removeEntityTool = tool(
   },
 );
 
+export const insertIntoTextFileTool = tool(
+  async ({
+    filePath,
+    inserts,
+  }: {
+    filePath: string;
+    inserts: { insertAfter: number; content: string }[];
+  }) => {
+    const fullPath = buildPathFromRootDir(filePath);
+    const { data: fileContent, error: readError } = await tryCatch(() =>
+      fs.readFile(fullPath, "utf-8"),
+    );
+    if (readError || fileContent === null) {
+      return `The '${filePath}' file does not exist or could not be read.`;
+    }
+
+    // Detect and preserve the original EOL style (\r\n, \n, or \r)
+    const isEmptyFile = fileContent.length === 0;
+    const eolMatch = isEmptyFile ? null : fileContent.match(/\r\n|\n|\r/);
+    const eol = eolMatch ? eolMatch[0] : "\n";
+    const originalLines = isEmptyFile ? [] : fileContent.split(/\r\n|\n|\r/);
+
+    let lines = [...originalLines];
+    for (const insert of inserts) {
+      const { insertAfter, content } = insert;
+      const newLines = content.split(/\r\n|\n|\r/);
+      lines = [
+        ...lines.slice(0, insertAfter),
+        ...newLines,
+        ...lines.slice(insertAfter),
+      ];
+    }
+
+    const updatedContent = lines.join(eol);
+    const { error: writeError } = await tryCatch(() =>
+      fs.writeFile(fullPath, updatedContent, "utf-8"),
+    );
+    if (writeError) {
+      console.error(writeError);
+      return `Failed to write changes to '${filePath}'.`;
+    }
+    return `Inserted ${lines.length} line(s) into '${filePath}'.`;
+  },
+  {
+    name: "insert_into_text_file_tool",
+    description:
+      "Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)",
+    schema: z.object({
+      filePath: z.string().describe("The path of the file to insert into"),
+      inserts: z.array(
+        z.object({
+          insertAfter: z
+            .number()
+            .describe("The line number after which to insert the content."),
+          content: z.string().describe("The content to insert"),
+        }),
+      ),
+    }),
+  },
+);
+
 export const patchTextFileTool = tool(
   async ({
     filePath,
@@ -155,18 +224,13 @@ export const patchTextFileTool = tool(
     const validationErrors: string[] = [];
     patches.forEach((p, index) => {
       const { startLine, endLine } = p;
-      const isInsertAtBeginning = startLine === 0 && endLine === 1;
-      // For empty files, allow insertion at end with startLine=0,endLine=0 for convenience
-      const isInsertAtEnd =
-        (startLine === lastLineNumber && endLine === 0) ||
-        (lastLineNumber === 0 && startLine === 0 && endLine === 0);
       const isNormalRange =
         startLine >= 1 &&
         endLine >= 1 &&
         startLine <= endLine &&
         endLine <= lastLineNumber;
 
-      if (!(isInsertAtBeginning || isInsertAtEnd || isNormalRange)) {
+      if (!isNormalRange) {
         validationErrors.push(
           `Patch ${
             index + 1
@@ -182,45 +246,20 @@ export const patchTextFileTool = tool(
     }
 
     // Apply patches in descending order of start line to avoid index shifts
-    const sortedPatches = [...patches].sort((a, b) => {
-      // Put insert-at-end last (highest), then normal ranges by start desc, then insert-at-beginning first
-      const rank = (p: { startLine: number; endLine: number }) => {
-        if (p.startLine === 0 && p.endLine === 1) return -1; // beginning inserts first
-        if (p.startLine === lastLineNumber && p.endLine === 0) return 1; // end inserts last
-        return 0;
-      };
-
-      const ra = rank(a);
-      const rb = rank(b);
-      if (ra !== rb) return ra - rb;
-      return b.startLine - a.startLine;
-    });
-
+    const sortedPatches = [...patches].sort(
+      (a, b) => b.startLine - a.startLine,
+    );
     let lines = [...originalLines];
 
     for (const patch of sortedPatches) {
       const { startLine, endLine, content } = patch;
       const newLines = content.length > 0 ? content.split(/\r\n|\n|\r/) : [];
-
-      if (startLine === 0 && endLine === 1) {
-        // Insert at beginning (before line 1)
-        lines = [...newLines, ...lines];
-        continue;
-      }
-
-      if (
-        (startLine === lastLineNumber && endLine === 0) ||
-        (lastLineNumber === 0 && startLine === 0 && endLine === 0)
-      ) {
-        // Insert at end
-        lines = [...lines, ...newLines];
-        continue;
-      }
-
-      // Replace lines in [startLine, endLine] inclusive (1-based)
       const startIndex = startLine - 1;
-      const deleteCount = endLine - startLine + 1;
-      lines.splice(startIndex, deleteCount, ...newLines);
+      lines = [
+        ...lines.slice(0, startIndex),
+        ...newLines,
+        ...lines.slice(endLine),
+      ];
     }
 
     const updatedContent = lines.join(eol);
@@ -237,7 +276,7 @@ export const patchTextFileTool = tool(
   {
     name: "patch_text_file_tool",
     description:
-      "Patch a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.). To insert at the beginning of the file return 0 for startLine and 1 for endLine. To insert at the end of the file return the last line number for startLine and 0 for endLine. For the rest of the operations, return the appropriate line start and end numbers.",
+      "Patch a text file by replacing existing line ranges only. Insertion is not supported here; use insert_into_text_file_tool for insertions. Must provide the full path (obtainable via list_project_files_and_dirs_tool).",
     schema: z.object({
       filePath: z.string().describe("The path of the file to patch"),
       patches: z
@@ -245,19 +284,19 @@ export const patchTextFileTool = tool(
           z.object({
             startLine: z
               .number()
-              .describe("The start line of the content to patch"),
+              .describe("The start line of the range to replace (1-based)"),
             endLine: z
               .number()
-              .describe("The end line of the content to patch"),
+              .describe("The end line of the range to replace (1-based)"),
             content: z
               .string()
               .describe(
-                "The content to patch. To remove lines return empty content.",
+                "Replacement content. Use empty string to delete the specified range.",
               ),
           }),
         )
         .describe(
-          "The patches to apply on the file. Based on the need return either one or multiple patches.",
+          "The patches to apply on the file. Each patch replaces the specified existing range.",
         ),
     }),
   },
@@ -268,4 +307,5 @@ export const toolsSet1 = [
   createEntityTool,
   removeEntityTool,
   patchTextFileTool,
+  insertIntoTextFileTool,
 ];

@@ -5,7 +5,6 @@ export async function tryCatch<T>(
     const res = await (typeof fn === "function" ? fn() : fn);
     return { data: res, error: null };
   } catch (error) {
-    console.error(error);
     return { data: null, error };
   }
 }
