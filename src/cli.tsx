@@ -73,6 +73,26 @@ const Hr: React.FC<{ char?: string; color?: string }> = ({
   );
 };
 
+const FullHeight: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { stdout } = useStdout();
+  const getRows = () => stdout?.rows ?? (process.stdout as any)?.rows ?? 24;
+  const [rows, setRows] = React.useState(getRows());
+
+  React.useEffect(() => {
+    const onResize = () => setRows(getRows());
+    stdout?.on("resize", onResize);
+    return () => {
+      stdout?.off?.("resize", onResize);
+    };
+  }, [stdout]);
+
+  return (
+    <Box flexDirection="column" minHeight={rows}>
+      {children}
+    </Box>
+  );
+};
+
 const RoleBadge: React.FC<{ message: BaseMessage }> = ({ message }) => {
   const user = message instanceof HumanMessage;
   const ai = message instanceof AIMessage;
@@ -236,27 +256,30 @@ const App: React.FC = () => {
   };
 
   return (
-    <Box flexDirection="column">
-      <Box height={1}>
+    <FullHeight>
+      <Box height={1} flexShrink={0}>
         <Text>AI CLI</Text>
       </Box>
-      <Box height={1}>
+      <Box height={1} flexShrink={0}>
         <Text dimColor>Commands: /clear to clear | /exit to exit</Text>
       </Box>
+
       <Box flexDirection="column" flexGrow={1}>
         {messages.map((m, idx) => (
           <MemoMessageView key={m.id ?? idx} message={m} />
         ))}
+        <Box flexGrow={1} />
       </Box>
-      <Box height={1}>
+
+      <Box height={1} flexShrink={0}>
         <Text color="gray" wrap="truncate-end">
           {busyStatus ?? ""}
         </Text>
       </Box>
-      <Box height={1}>
+      <Box height={1} flexShrink={0}>
         <Hr />
       </Box>
-      <Box>
+      <Box flexShrink={0}>
         <Text>› </Text>
         <TextInput
           value={input}
@@ -273,7 +296,7 @@ const App: React.FC = () => {
           placeholder="/clear to clear | /exit to exit"
         />
       </Box>
-    </Box>
+    </FullHeight>
   );
 };
 
