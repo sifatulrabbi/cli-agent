@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { render, Box, Text, useApp, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import {
@@ -14,7 +14,7 @@ import {
   addMsgToHistory,
   clearHistory,
 } from "@/agent";
-import { toolsSet1 } from "./toolsSet1";
+import { toolsSet1 } from "@/toolsSet1";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -199,7 +199,7 @@ const App: React.FC = () => {
   const { exit } = useApp();
   const [messages, setMessages] = React.useState<
     Array<AIMessage | HumanMessage | ToolMessage>
-  >([]);
+  >(loadHistory(HISTORY_PATH));
   const [input, setInput] = React.useState("");
   const [busyStatus, setBusyStatus] = React.useState<string | null>(null);
 
@@ -220,7 +220,6 @@ const App: React.FC = () => {
 
     const userMsg = new HumanMessage({ content: trimmed });
     setBusyStatus("processing...");
-    // setSelectedIndex(messages.length);
     addMsgToHistory(HISTORY_PATH, userMsg);
     setInput("");
     invokeDebuggerAgent(
@@ -236,40 +235,40 @@ const App: React.FC = () => {
     });
   };
 
-  useEffect(() => {
-    setMessages(loadHistory(HISTORY_PATH));
-  }, []);
-
   return (
     <Box flexDirection="column">
-      <Text>AI CLI</Text>
-      <Box>
+      <Box height={1}>
+        <Text>AI CLI</Text>
+      </Box>
+      <Box height={1}>
         <Text dimColor>Commands: /clear to clear | /exit to exit</Text>
       </Box>
-      <Box marginTop={1} flexDirection="column">
+      <Box flexDirection="column" flexGrow={1}>
         {messages.map((m, idx) => (
           <MemoMessageView key={m.id ?? idx} message={m} />
         ))}
       </Box>
-      {busyStatus && (
-        <Box marginTop={1} flexDirection="column">
-          <Text color="gray" wrap="wrap">
-            {busyStatus}
-          </Text>
-        </Box>
-      )}
-      <Box>
+      <Box height={1}>
+        <Text color="gray" wrap="truncate-end">
+          {busyStatus ?? ""}
+        </Text>
+      </Box>
+      <Box height={1}>
         <Hr />
       </Box>
-      <Box marginTop={1} borderTop>
+      <Box>
         <Text>› </Text>
         <TextInput
           value={input}
           onChange={(v) => {
             if (!busyStatus) setInput(v);
           }}
-          onSubmit={(v) => {
-            if (!busyStatus) onSubmit(v);
+          onSubmit={() => {
+            if (input.trim().endsWith("\\")) {
+              setInput(input.slice(0, -1) + "\n");
+              return;
+            }
+            onSubmit(input);
           }}
           placeholder="/clear to clear | /exit to exit"
         />
