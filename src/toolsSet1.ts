@@ -8,6 +8,15 @@ import chalk from "chalk";
 
 const projectRootDir = path.join(TESTING_DIR, ACTIVE_PROJECT_DIR);
 const isBenching = process.env.NODE_ENV === "benchmark";
+const ignorePaths = [
+  ".venv",
+  ".git",
+  ".DS_Store",
+  ".vscode",
+  ".idea",
+  "node_modules",
+  "__pycache__",
+];
 
 export function buildPathFromRootDir(entryPath: string) {
   let sanitizedPath = entryPath;
@@ -20,6 +29,10 @@ export function buildPathFromRootDir(entryPath: string) {
 }
 
 async function traverseDir(dirPath: string, depth = 0) {
+  if (ignorePaths.some((p) => dirPath.includes(p))) {
+    return [];
+  }
+
   const entries = await fs.readdir(dirPath);
   const formattedEntries: string[] = [];
 
@@ -39,6 +52,10 @@ async function traverseDir(dirPath: string, depth = 0) {
   }
 
   return formattedEntries;
+}
+
+function safeSplit(content: string) {
+  return content.split(/\r\n|\n|\r/);
 }
 
 export const listProjectFilesTool = tool(
@@ -87,15 +104,26 @@ export const readFilesTool = tool(
         ", ",
       )}' files do not exist or could not be read.`;
     }
+
     const sections = filePaths.map((originalPath, index) => {
       const content = fileContents[index] ?? "";
-      return `File: ${originalPath}\n${content}`;
+      const lines = safeSplit(content);
+      const maxLineNumColWidth = lines.length.toString().length;
+
+      return `File: ${originalPath}\n${lines
+        .map(
+          (line, index) =>
+            `${(index + 1).toString().padStart(maxLineNumColWidth)} | ${line}`,
+        )
+        .join("\n")}\n`;
     });
+
     if (isBenching) {
       console.log(
         chalk.gray(`Successfully read files: ${filePaths.join(", ")}`),
       );
     }
+
     return sections.join("\n\n");
   },
   {
@@ -247,12 +275,12 @@ export const insertIntoTextFileTool = tool(
     const isEmptyFile = fileContent.length === 0;
     const eolMatch = isEmptyFile ? null : fileContent.match(/\r\n|\n|\r/);
     const eol = eolMatch ? eolMatch[0] : "\n";
-    const originalLines = isEmptyFile ? [] : fileContent.split(/\r\n|\n|\r/);
+    const originalLines = isEmptyFile ? [] : safeSplit(fileContent);
 
     let lines = [...originalLines];
     for (const insert of inserts) {
       const { insertAfter, content } = insert;
-      const newLines = content.split(/\r\n|\n|\r/);
+      const newLines = safeSplit(content);
       lines = [
         ...lines.slice(0, insertAfter),
         ...newLines,

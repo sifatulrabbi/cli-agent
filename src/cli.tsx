@@ -1,5 +1,5 @@
 import React from "react";
-import { render, Box, Text, useApp, useStdout } from "ink";
+import { render, Box, Text, useApp, useStdout, useInput } from "ink";
 import TextInput from "ink-text-input";
 import {
   AIMessage,
@@ -87,7 +87,7 @@ const FullHeight: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }, [stdout]);
 
   return (
-    <Box flexDirection="column" minHeight={rows}>
+    <Box flexDirection="column" minHeight={rows - 1}>
       {children}
     </Box>
   );
@@ -125,15 +125,20 @@ const SectionHeader: React.FC<{ title: string; color?: string }> = ({
 
 const MessageView: React.FC<{
   message: BaseMessage;
+  isFirst?: boolean;
+  isLast?: boolean;
 }> = ({ message }) => {
   if (message instanceof HumanMessage) {
     return (
-      <Box flexDirection="column" paddingLeft={1} paddingTop={2}>
-        <Box>
-          <RoleBadge message={message} />
-          <Text wrap="wrap">{stringifyContent(message.content).trim()}</Text>
+      <>
+        <Box paddingTop={1} width={1}></Box>
+        <Box flexDirection="column" paddingLeft={1} backgroundColor="#333">
+          <Box>
+            <RoleBadge message={message} />
+            <Text wrap="wrap">{stringifyContent(message.content).trim()}</Text>
+          </Box>
         </Box>
-      </Box>
+      </>
     );
   }
   if (message instanceof AIMessage) {
@@ -170,19 +175,7 @@ const MessageView: React.FC<{
                     flexDirection="column"
                     paddingLeft={2}
                   >
-                    <Text>
-                      ↳ <Text bold>{tc.name}</Text>{" "}
-                      {tc.id ? <Text dimColor>#{tc.id}</Text> : null}
-                    </Text>
-                    <Box paddingLeft={2}>
-                      <Text color="yellow">args</Text>
-                    </Box>
-                    <Box paddingLeft={4}>
-                      <Text wrap="wrap" dimColor>
-                        {formatJson(tc.args).slice(0, 100)}
-                        {"..."}
-                      </Text>
-                    </Box>
+                    <Text dimColor>↳ {tc.name}</Text>
                   </Box>
                 ))}
               </>
@@ -193,19 +186,26 @@ const MessageView: React.FC<{
     );
   }
   if (message instanceof ToolMessage) {
-    const toolId = (message as any).tool_call_id as string | undefined;
+    const toolName = message.name as string | undefined;
     return (
       <Box flexDirection="column" paddingLeft={1}>
         <Box>
           <RoleBadge message={message} />
-          <Box flexDirection="column">
-            <Text>↳ for {toolId ?? "unknown"}</Text>
-            <Box paddingLeft={2}>
-              <Text wrap="wrap" dimColor>
-                {stringifyContent(message.content).slice(0, 100)}
-                {"..."}
-              </Text>
-            </Box>
+          <Box flexDirection="row" gap={1}>
+            <Text dimColor>↳ {toolName ?? "unknown"}</Text>
+            <Text dimColor>{"->"}</Text>
+            <Text
+              dimColor
+              color={
+                message.status === "error"
+                  ? "red"
+                  : message.status === "success"
+                  ? "green"
+                  : "yellow"
+              }
+            >
+              {message.status || "unknown"}
+            </Text>
           </Box>
         </Box>
       </Box>
@@ -255,18 +255,31 @@ const App: React.FC = () => {
     });
   };
 
+  useInput(() => {});
+
   return (
     <FullHeight>
       <Box height={1} flexShrink={0}>
-        <Text>AI CLI</Text>
+        <Text bold>AI CLI</Text>
       </Box>
       <Box height={1} flexShrink={0}>
-        <Text dimColor>Commands: /clear to clear | /exit to exit</Text>
+        <Text dimColor italic>
+          Commands: /clear to clear, /exit to exit, use \ to continue with a new
+          line
+        </Text>
+      </Box>
+      <Box>
+        <Hr />
       </Box>
 
       <Box flexDirection="column" flexGrow={1}>
         {messages.map((m, idx) => (
-          <MemoMessageView key={m.id ?? idx} message={m} />
+          <MemoMessageView
+            key={m.id ?? idx}
+            message={m}
+            isFirst={idx === 0}
+            isLast={idx === messages.length - 1}
+          />
         ))}
         <Box flexGrow={1} />
       </Box>
@@ -279,7 +292,7 @@ const App: React.FC = () => {
       <Box height={1} flexShrink={0}>
         <Hr />
       </Box>
-      <Box flexShrink={0}>
+      <Box flexShrink={0} backgroundColor="#333">
         <Text>› </Text>
         <TextInput
           value={input}
@@ -293,7 +306,7 @@ const App: React.FC = () => {
             }
             onSubmit(input);
           }}
-          placeholder="/clear to clear | /exit to exit"
+          placeholder="Enter your message..."
         />
       </Box>
     </FullHeight>

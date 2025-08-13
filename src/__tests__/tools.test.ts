@@ -6,6 +6,7 @@ import {
   patchTextFileTool,
   buildPathFromRootDir,
   insertIntoTextFileTool,
+  readFilesTool,
 } from "../toolsSet1";
 
 const projectRootDir = path.join(TESTING_DIR, ACTIVE_PROJECT_DIR);
@@ -72,3 +73,11 @@ async function patchFileTest() {
   console.log("Patch Result:", result);
 }
 // await patchFileTest();
+
+async function readFilesTest() {
+  const result = await readFilesTool.invoke({
+    filePaths: ["financial_dashboard.py"],
+  });
+  console.log("Result:\n%s", result);
+}
+// await readFilesTest();

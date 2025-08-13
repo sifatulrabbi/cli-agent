@@ -7,9 +7,10 @@ import {
   AIMessage,
 } from "@langchain/core/messages";
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
-import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { toolsCondition } from "@langchain/langgraph/prebuilt";
 import { DynamicStructuredTool } from "langchain/tools";
 import fs from "fs";
+import { tryCatch } from "@/utils";
 
 export type DebuggerAgentOptions = {
   historyPath: string;
@@ -75,8 +76,11 @@ function callModelFactory(
   llm: ChatOpenAI | ChatOpenAIResponses,
   sysMsg: SystemMessage,
   tools: DynamicStructuredTool[],
+  updateHistory: (messages: BaseMessage[], status?: string) => void,
 ) {
   return async function (state: typeof MessagesAnnotation.State) {
+    updateHistory(state.messages, "thinking...");
+
     const messages = [sysMsg, ...state.messages];
     const response = await llm.bindTools(tools).invoke(
       messages.map((msg) => {
@@ -90,6 +94,41 @@ function callModelFactory(
       }),
     );
     return { messages: [response] };
+  };
+}
+
+function customToolNode(
+  tools: DynamicStructuredTool[],
+  updateHistory: (messages: BaseMessage[], status?: string) => void,
+) {
+  return async function (state: typeof MessagesAnnotation.State) {
+    const aiMsg = state.messages.at(-1) as AIMessage;
+    const toolMessages: ToolMessage[] = [];
+    for (const toolCall of aiMsg.tool_calls ?? []) {
+      const tool = tools.find((t) => t.name === toolCall.name);
+      if (tool) {
+        updateHistory(state.messages, `using ${tool.name}...`);
+        const { data: result, error } = await tryCatch(
+          tool.invoke(toolCall.args),
+        );
+        const msg = new ToolMessage({
+          content: result,
+          tool_call_id: toolCall.id ?? "",
+          name: tool.name,
+          status: error ? "error" : "success",
+          additional_kwargs: {
+            tool_call_id: toolCall.id ?? "",
+            tool_name: tool.name,
+            args: toolCall.args,
+            error: error ? String(error) : undefined,
+          },
+        });
+        toolMessages.push(msg);
+      }
+    }
+
+    updateHistory(state.messages, `thinking...`);
+    return { messages: [...toolMessages] };
   };
 }
 
@@ -141,20 +180,23 @@ export async function invokeDebuggerAgent(
   llm: ChatOpenAI | ChatOpenAIResponses,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,
-  updateHistory: (messages: BaseMessage[], status?: string) => void,
+  updateHistory: (messages: BaseMessage[], status?: string | null) => void,
 ) {
   const system = new SystemMessage({
     content: (options.systemInstruction ?? defaultSystemInstruction()).trim(),
   });
-  const toolNode = new ToolNode(tools);
   const history: BaseMessage[] = loadHistory(options.historyPath);
 
-  updateHistory(history, "thinking...");
-  syncHistory(options.historyPath, history);
+  function sync(messages: BaseMessage[], status?: string) {
+    updateHistory(messages, status);
+    syncHistory(options.historyPath, messages);
+  }
+
+  sync(history, "thinking...");
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("llm", callModelFactory(llm, system, tools))
-    .addNode("tools", toolNode)
+    .addNode("llm", callModelFactory(llm, system, tools, sync))
+    .addNode("tools", customToolNode(tools, sync))
     .addConditionalEdges(START, (state) => {
       if (state.messages.at(-1)?.getType() === "ai") {
         const lastMsg = state.messages.at(-1) as AIMessage;
@@ -162,20 +204,9 @@ export async function invokeDebuggerAgent(
           return "tools";
         }
       }
-      updateHistory(state.messages, "thinking...");
-      syncHistory(options.historyPath, state.messages);
       return "llm";
     })
-    .addConditionalEdges("llm", (state) => {
-      syncHistory(options.historyPath, state.messages);
-      updateHistory(state.messages);
-      const nextNode = toolsCondition(state);
-      if (nextNode === "tools") {
-        updateHistory(state.messages, "performing tool call(s)...");
-        syncHistory(options.historyPath, state.messages);
-      }
-      return nextNode;
-    })
+    .addConditionalEdges("llm", toolsCondition)
     .addEdge("tools", "llm")
     .compile();
 
@@ -184,9 +215,7 @@ export async function invokeDebuggerAgent(
     { recursionLimit: 10 ** 10 },
   );
 
-  syncHistory(options.historyPath, result.messages);
-  updateHistory(result.messages);
-
+  sync(result.messages, "finalizing...");
   return result;
 }
 
