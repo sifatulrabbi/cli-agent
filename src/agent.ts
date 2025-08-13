@@ -67,6 +67,14 @@ export const models = {
     },
     useResponsesApi: true,
   }),
+  gpt5MiniHigh: new ChatOpenAI({
+    model: "gpt-5-mini",
+    reasoning: {
+      effort: "high",
+      summary: "auto",
+    },
+    useResponsesApi: true,
+  }),
 };
 
 function defaultSystemInstruction(): string {

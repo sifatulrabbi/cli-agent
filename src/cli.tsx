@@ -142,23 +142,36 @@ const MessageView: React.FC<{
     );
   }
   if (message instanceof AIMessage) {
-    const reasoningTexts: string[] = [];
     const toolCalls = message.tool_calls ?? [];
+
+    const reasoningTexts: string[] = [];
+    const reasoningItems =
+      message?.response_metadata?.output?.filter(
+        (item: any) => item?.type === "reasoning",
+      ) || [];
+    reasoningItems?.forEach((item: any) => {
+      if (item?.summary) {
+        reasoningTexts.push(...item.summary.map((s: any) => s.text));
+      }
+    });
+    const reasoning = message.additional_kwargs?.reasoning as any;
+    if (reasoning && reasoning.summary) {
+      reasoningTexts.push(...reasoning.summary.map((s: any) => s.text));
+    }
+
     return (
       <Box flexDirection="column" paddingLeft={1}>
         <Box>
           <RoleBadge message={message} />
           <Box flexDirection="column">
-            {reasoningTexts.length ? (
+            {reasoningItems.length || reasoningTexts.length ? (
               <>
                 <SectionHeader title="reasoning" />
-                {reasoningTexts.map((rt, idx) => (
-                  <Box paddingLeft={2} key={`rs-${idx}`}>
-                    <Text color="gray" wrap="wrap">
-                      {rt}
-                    </Text>
-                  </Box>
-                ))}
+                <Box flexDirection="column" gap={0} paddingBottom={1}>
+                  <Text color="gray" wrap="wrap">
+                    {reasoningTexts.map((txt) => txt.trim()).join("")}
+                  </Text>
+                </Box>
               </>
             ) : null}
             {message.content ? (
@@ -244,7 +257,7 @@ const App: React.FC = () => {
     addMsgToHistory(HISTORY_PATH, userMsg);
     setInput("");
     invokeDebuggerAgent(
-      models.gptOss120b,
+      models.gpt5MiniHigh,
       toolsSet1,
       { historyPath: HISTORY_PATH },
       (messages, status = "thinking...") => {
