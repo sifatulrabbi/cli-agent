@@ -13,6 +13,7 @@ import { DynamicStructuredTool } from "langchain/tools";
 import fs from "fs";
 import { tryCatch } from "@/utils";
 import { concat } from "@langchain/core/utils/stream";
+import { logger } from "@/logger";
 
 export type DebuggerAgentOptions = {
   historyPath: string;
@@ -77,6 +78,8 @@ export const models = {
   }),
 };
 
+export type ModelName = keyof typeof models;
+
 function defaultSystemInstruction(): string {
   return `
 You are an agentic coding assistant operating within this project. Be precise, safe, and helpful.
@@ -111,7 +114,7 @@ function callModelFactory(
   updateHistory: (messages: BaseMessage[], status?: string) => void,
 ) {
   return async function (state: typeof MessagesAnnotation.State) {
-    updateHistory(state.messages, "thinking...");
+    updateHistory(state.messages, "Thinking");
 
     const messages = [
       sysMsg,
@@ -142,7 +145,7 @@ function callModelFactory(
             invalid_tool_calls: response.invalid_tool_calls,
             additional_kwargs: response.additional_kwargs,
           });
-          updateHistory([...state.messages, finalResponse], `thinking...`);
+          updateHistory([...state.messages, finalResponse], "Thinking");
         }
       }
 
@@ -165,11 +168,11 @@ function callModelFactory(
         additional_kwargs: response.additional_kwargs,
       });
 
-      updateHistory([...state.messages, finalResponse], `thinking...`);
+      updateHistory([...state.messages, finalResponse], "Thinking");
 
       return { messages: [finalResponse] };
     } catch (error) {
-      console.error(error);
+      logger.error(error);
       return {
         messages: [new AIMessage({ content: "Error: " + String(error) })],
       };
@@ -187,7 +190,7 @@ function customToolNode(
     for (const toolCall of aiMsg.tool_calls ?? []) {
       const tool = tools.find((t) => t.name === toolCall.name);
       if (tool) {
-        updateHistory(state.messages, `using ${tool.name}...`);
+        updateHistory(state.messages, `Using ${tool.name}...`);
         const { data: result, error } = await tryCatch(
           tool.invoke(toolCall.args),
         );
@@ -208,7 +211,7 @@ function customToolNode(
       }
     }
 
-    updateHistory(state.messages, `thinking...`);
+    updateHistory(state.messages, "Using tools");
     return { messages: [...toolMessages] };
   };
 }
@@ -260,7 +263,7 @@ export function loadHistory(historyPath: string): BaseMessage[] {
 }
 
 export async function invokeDebuggerAgent(
-  llm: ChatOpenAI | ChatOpenAIResponses,
+  llm: keyof typeof models,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,
   updateHistory: (messages: BaseMessage[], status?: string | null) => void,
@@ -275,10 +278,10 @@ export async function invokeDebuggerAgent(
     syncHistory(options.historyPath, messages);
   }
 
-  sync(history, "thinking...");
+  sync(history, "Thinking");
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("llm", callModelFactory(llm, system, tools, sync))
+    .addNode("llm", callModelFactory(models[llm], system, tools, sync))
     .addNode("tools", customToolNode(tools, sync))
     .addConditionalEdges(START, (state) => {
       if (state.messages.at(-1)?.getType() === "ai") {
@@ -298,7 +301,7 @@ export async function invokeDebuggerAgent(
     { recursionLimit: 10 ** 10 },
   );
 
-  sync(result.messages, "finalizing...");
+  sync(result.messages, "finalizing");
   return result;
 }
 

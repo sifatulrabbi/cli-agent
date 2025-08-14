@@ -19,7 +19,6 @@
     "chalk": "^5.5.0",
     "dotenv": "^17.2.1",
     "ink": "^6.1.0",
-    "ink-text-input": "^6.0.0",
     "langchain": "^0.3.30",
     "lodash": "^4.17.21",
     "openai": "^5.12.2",
