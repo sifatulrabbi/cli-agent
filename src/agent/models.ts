@@ -120,6 +120,25 @@ export const models = {
     },
     streamUsage: true,
   }),
+  mistralMedium31: new ChatOpenAI({
+    model: "mistralai/mistral-medium-3.1",
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "https://openrouter.ai/api/v1",
+    },
+    streamUsage: true,
+  }),
+  gptOss20bFree: new ChatOpenAI({
+    model: "openai/gpt-oss-20b:free",
+    modelKwargs: {
+      reasoning_effort: "high",
+    },
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "https://openrouter.ai/api/v1",
+    },
+    streamUsage: true,
+  }),
 };
 
 export type ModelName = keyof typeof models;
