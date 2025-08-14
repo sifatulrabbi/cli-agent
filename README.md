@@ -36,10 +36,12 @@ OPENROUTER_API_KEY=or-...
 
 ### Running
 
-- **Dev (bun, no build):**
+- **Dev (bun/tsx, no build):**
 
 ```bash
 bun src/index.tsx
+# or
+node --import tsx src/index.tsx
 ```
 
 Notes:
