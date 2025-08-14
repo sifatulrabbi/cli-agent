@@ -1,4 +1,4 @@
-import { ChatOpenAI, ChatOpenAIResponses } from "@langchain/openai";
+import type { ChatOpenAI, ChatOpenAIResponses } from "@langchain/openai";
 import {
   SystemMessage,
   BaseMessage,
@@ -13,135 +13,15 @@ import { db, loadMessages, saveMessages } from "@/db";
 import { tryCatch } from "@/utils";
 import { concat } from "@langchain/core/utils/stream";
 import { logger } from "@/logger";
+import { models } from "@/agent/models";
+import { defaultSystemInstruction } from "@/agent/prompts";
+import type { ModelName } from "@/agent/models";
 
 export type DebuggerAgentOptions = {
   historyPath: string;
   systemInstruction?: string;
   trimReasoning?: boolean;
 };
-
-export const models = {
-  gpt41mini: new ChatOpenAI({
-    model: "gpt-4.1-mini",
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gpt41: new ChatOpenAI({
-    model: "gpt-4.1",
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gptOss120b: new ChatOpenAI({
-    model: "gpt-oss-120b",
-    modelKwargs: {
-      reasoning_effort: "high",
-    },
-    apiKey: process.env.OPENROUTER_API_KEY,
-    configuration: {
-      baseURL: "https://openrouter.ai/api/v1",
-    },
-    streamUsage: true,
-  }),
-  gptOss20bLocal: new ChatOpenAI({
-    model: "openai/gpt-oss-20b",
-    modelKwargs: {
-      reasoning_effort: "high",
-    },
-    configuration: {
-      baseURL: "http://127.0.0.1:8089/v1",
-    },
-    streamUsage: true,
-  }),
-  codexMini: new ChatOpenAI({
-    model: "codex-mini",
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  o4MiniHigh: new ChatOpenAI({
-    model: "o4-mini",
-    reasoning: {
-      effort: "high",
-      summary: "auto",
-    },
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gpt5: new ChatOpenAI({
-    model: "gpt-5",
-    reasoning: {
-      effort: "minimal",
-      summary: "auto",
-    },
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gpt5High: new ChatOpenAI({
-    model: "gpt-5",
-    reasoning: {
-      effort: "high",
-      summary: "auto",
-    },
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gpt5MiniHigh: new ChatOpenAI({
-    model: "gpt-5-mini",
-    reasoning: {
-      effort: "high",
-      summary: "auto",
-    },
-    useResponsesApi: true,
-    streamUsage: true,
-  }),
-  gptOss20bHigh: new ChatOpenAI({
-    model: "openai/gpt-oss-20b",
-    modelKwargs: {
-      reasoning_effort: "high",
-    },
-    apiKey: process.env.OPENROUTER_API_KEY,
-    configuration: {
-      baseURL: "https://openrouter.ai/api/v1",
-    },
-    streamUsage: true,
-  }),
-  zAiGlm45: new ChatOpenAI({
-    model: "z-ai/glm-4.5v",
-    apiKey: process.env.OPENROUTER_API_KEY,
-    configuration: {
-      baseURL: "https://openrouter.ai/api/v1",
-    },
-    streamUsage: true,
-  }),
-};
-
-export type ModelName = keyof typeof models;
-
-function defaultSystemInstruction(): string {
-  return `
-You are an agentic coding assistant operating within this project. Be precise, safe, and helpful.
-
-You can:
-- Receive user prompts, project context, and files.
-- Use the available tools to read, create, modify, and remove files. Terminal command execution is not available.
-
-Keep going until the user's query is fully resolved before ending your turn. If you are unsure about file contents or codebase structure, use the tools to read files instead of guessing.
-
-When modifying code, make focused, minimal edits that address the root cause, avoid unnecessary complexity, and keep changes consistent with the existing style. Do not include large file dumps in responses unless explicitly requested.
-
-AVAILABLE TOOLS (use only these and follow their contracts exactly):
-- list_project_files_and_dirs_tool: List all files and directories in the active project. Returns entries wrapped in <project-entries> and prefixed by the active project directory name. Use this to discover full paths before operating on files.
-- read_files_tool: Read multiple text files.
-- create_entity_tool: Create a directory or file.
-- remove_entity_tool: Delete a file or directory recursively.
-- insert_into_text_file_tool: Insert content into a text file at specific positions while preserving original EOL style.
-- patch_text_file_tool: Replace existing line ranges only (no pure insertions).
-
-NOTES ON PATHS AND EDITING:
-- Always provide full paths relative to the active project root. If unsure, first call list_project_files_and_dirs_tool and then pass one of its returned entries.
-- For textual edits, prefer patch_text_file_tool for replacements and insert_into_text_file_tool for insertions. Do not attempt insertions with the patch tool.
-- When responding to the user do not apply any formatting (e.g. markdown, code blocks, etc.). Only use plain text and line breaks.
-`.trim();
-}
 
 function callModelFactory(
   llm: ChatOpenAI | ChatOpenAIResponses,
@@ -274,7 +154,7 @@ function customToolNode(
 }
 
 export async function invokeAgent(
-  llm: keyof typeof models,
+  llm: ModelName,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,
   renderUpdate: (messages: BaseMessage[], status?: string | null) => void,

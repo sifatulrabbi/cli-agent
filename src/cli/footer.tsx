@@ -3,33 +3,27 @@ import { Box, Text } from "ink";
 import { BaseMessage } from "@langchain/core/messages";
 
 const modelInfo: Record<string, { description: string }> = {
-  gpt41mini: {
-    description: "OpenAI gpt-4.1-mini",
-  },
-  gpt41: {
-    description: "OpenAI gpt-4.1",
-  },
-  gptOss120b: {
-    description: "OpenRouter gpt-oss-120b (reasoning: high)",
-  },
+  gpt41mini: { description: "OpenAI gpt-4.1-mini" },
+  gpt41: { description: "OpenAI gpt-4.1" },
+  gpt4o: { description: "OpenAI gpt-4o" },
+  gpt4oMini: { description: "OpenAI gpt-4o-mini" },
   gptOss20bLocal: {
     description: "Locally hosted gpt-oss-20b (reasoning: high)",
   },
-  codexMini: {
-    description: "OpenAI codex-mini",
+  codexMini: { description: "OpenAI codex-mini" },
+  o4Mini: { description: "OpenAI o4-mini (reasoning: low)" },
+  o4MiniHigh: { description: "OpenAI o4-mini (reasoning: high)" },
+  gpt5: { description: "OpenAI gpt-5 (reasoning: minimal)" },
+  gpt5High: { description: "OpenAI gpt-5 (reasoning: high)" },
+  gpt5Mini: { description: "OpenAI gpt-5-mini (reasoning: minimal)" },
+  gpt5MiniHigh: { description: "OpenAI gpt-5-mini (reasoning: high)" },
+  gptOss20bHigh: {
+    description: "OpenRouter gpt-oss-20b (reasoning: high)",
   },
-  o4MiniHigh: {
-    description: "OpenAI o4-mini (reasoning: high)",
+  gptOss120bHigh: {
+    description: "OpenRouter gpt-oss-120b (reasoning: high)",
   },
-  gpt5: {
-    description: "OpenAI gpt-5 (reasoning: minimal)",
-  },
-  gpt5High: {
-    description: "OpenAI gpt-5 (reasoning: high)",
-  },
-  gpt5MiniHigh: {
-    description: "OpenAI gpt-5-mini (reasoning: high)",
-  },
+  zAiGlm45: { description: "OpenRouter z-ai/glm-4.5v" },
 };
 
 export const Footer: React.FC<{ messages: BaseMessage[]; model: string }> = ({
