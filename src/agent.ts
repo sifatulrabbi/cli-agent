@@ -40,6 +40,16 @@ export const models = {
       baseURL: "https://openrouter.ai/api/v1",
     },
   }),
+  gptOss20bLocal: new ChatOpenAI({
+    model: "openai/gpt-oss-20b",
+    modelKwargs: {
+      reasoning_effort: "high",
+    },
+    // apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "http://127.0.0.1:8089/v1",
+    },
+  }),
   codexMini: new ChatOpenAI({
     model: "codex-mini",
     useResponsesApi: true,
