@@ -1,11 +1,10 @@
 import React from "react";
-import { Box, useApp } from "ink";
+import { Box, Static, useApp } from "ink";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { invokeAgent } from "@/agent";
 import type { ModelName } from "@/agent/models";
 import { HeaderBar } from "@/cli/header";
-import { FullHeight } from "@/cli/full-height";
 import { Hr } from "@/cli/hr";
 import { Input } from "@/cli/input";
 import { MessageView } from "@/cli/messages";
@@ -19,15 +18,21 @@ export const App: React.FC<{
   tools: DynamicStructuredTool[];
 }> = ({ model, historyPath, tools }) => {
   const { exit } = useApp();
-  const [messages, setMessages] = React.useState<BaseMessage[]>([]);
   const [busyStatus, setBusyStatus] = React.useState<string | null>(null);
+  const [allMessages, setAllMessages] = React.useState<BaseMessage[]>([]);
+  const [activeMessages, setActiveMessages] = React.useState<BaseMessage[]>([]);
+  const history = React.useMemo(() => {
+    if (busyStatus) return [];
+    return allMessages;
+  }, [allMessages, busyStatus]);
 
   const onSubmit = async (inputValue: string) => {
     const trimmed = inputValue.trim();
     if (trimmed === "/clear") {
       setBusyStatus("Clearing");
       await clearThread(db, historyPath);
-      setMessages([]);
+      setAllMessages([]);
+      setActiveMessages([]);
       setBusyStatus(null);
       return;
     }
@@ -41,12 +46,12 @@ export const App: React.FC<{
     let userMsg: HumanMessage | null = new HumanMessage({ content: trimmed });
 
     if (!trimmed) {
-      const lastMsg = messages.at(-1);
+      const lastMsg = activeMessages.at(-1);
       if (!lastMsg) {
         const failedAIMsg = new AIMessage({
           content: "Please enter a message to continue!",
         });
-        setMessages((prev) => [...prev, userMsg!, failedAIMsg]);
+        setAllMessages((prev) => [...prev, userMsg!, failedAIMsg]);
         setBusyStatus(null);
         return;
       } else if (lastMsg?.getType() === "ai") {
@@ -57,36 +62,52 @@ export const App: React.FC<{
     }
     if (userMsg) await appendMessage(db, historyPath, userMsg);
 
+    let syncedMessages: BaseMessage[] = [];
     await invokeAgent(
       model,
       tools,
       { historyPath },
       (messages, status = "Thinking") => {
-        setMessages(messages);
+        syncedMessages = messages;
+        setActiveMessages(messages.slice(allMessages.length - 1));
         setBusyStatus(status);
       },
     );
     setBusyStatus(null);
+    setAllMessages(syncedMessages);
+    setActiveMessages([]);
   };
 
   React.useEffect(() => {
     setBusyStatus("Loading");
     loadMessages(db, historyPath)
-      .then(setMessages)
+      .then(setAllMessages)
       .finally(() => setBusyStatus(null));
   }, []);
 
   return (
-    <FullHeight>
+    <>
       <HeaderBar />
       <Hr />
-      <Box flexDirection="column" flexGrow={1} paddingBottom={2}>
-        {messages.map((m, idx) => (
+      <Box flexDirection="column" paddingBottom={2}>
+        <Static items={history}>
+          {(msg) => (
+            <MessageView
+              key={msg.id}
+              message={msg}
+              isFirst={msg.id === history[0].id}
+              isLast={msg.id === history[history.length - 1].id}
+            />
+          )}
+        </Static>
+      </Box>
+      <Box flexDirection="column" paddingBottom={2}>
+        {activeMessages.map((item) => (
           <MessageView
-            key={m.id ?? idx}
-            message={m}
-            isFirst={idx === 0}
-            isLast={idx === messages.length - 1}
+            key={item.id}
+            message={item}
+            isFirst={item.id === activeMessages[0].id}
+            isLast={item.id === activeMessages[activeMessages.length - 1].id}
           />
         ))}
       </Box>
@@ -98,8 +119,8 @@ export const App: React.FC<{
         paddingRight={3}
       >
         <Input onSubmit={onSubmit} busyStatus={busyStatus} />
-        <Footer model={model} messages={messages} />
+        <Footer model={model} messages={[...allMessages, ...activeMessages]} />
       </Box>
-    </FullHeight>
+    </>
   );
 };

@@ -26,6 +26,11 @@
     },
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "benchmarks/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "benchmarks/**/*.ts",
+    "src/practices/test1.jsx"
+  ],
   "exclude": ["node_modules", "dist", "testBench"]
 }

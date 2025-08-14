@@ -1,5 +1,11 @@
 import dotenv from "dotenv";
-dotenv.config();
+const result = dotenv.config({ path: "../.env" });
+if (result.parsed) {
+  process.env = {
+    ...process.env,
+    ...result.parsed,
+  };
+}
 
 import { render } from "ink";
 import { App } from "@/cli";
@@ -9,7 +15,7 @@ import { ModelName, models } from "@/agent/models";
 const THREAD_ID = process.env.THREAD_ID ?? "default";
 let defaultModel = process.env.DEFAULT_MODEL;
 if (!defaultModel || !Object.keys(models).includes(defaultModel)) {
-  defaultModel = "gpt41mini";
+  defaultModel = "gpt5MiniHigh";
 }
 
 render(

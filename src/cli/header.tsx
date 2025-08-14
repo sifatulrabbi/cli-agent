@@ -1,5 +1,6 @@
+import React from "react";
 import { execSync } from "child_process";
-import { Box, Text } from "ink";
+import { Box, Text, Static } from "ink";
 import os from "os";
 
 function formatPathForDisplay(absPath: string): string {
@@ -22,19 +23,27 @@ function getGitBranch(): string | null {
 }
 
 export const HeaderBar: React.FC = () => {
-  const cwd = formatPathForDisplay(process.cwd());
-  const branch = getGitBranch();
+  const items = React.useMemo(() => [{ id: "header" }], []);
+  const cwd = React.useMemo(() => formatPathForDisplay(process.cwd()), []);
+  const branch = React.useMemo(() => getGitBranch(), []);
+
   return (
-    <>
-      <Box height={1} flexShrink={0}>
-        <Text bold>Cli Agent</Text>
-      </Box>
-      <Box height={1} flexShrink={0}>
-        <Text dimColor>
-          {cwd}
-          {branch ? ` · ${branch}` : ""}
-        </Text>
-      </Box>
-    </>
+    <Box flexDirection="column" flexShrink={0}>
+      <Static items={items}>
+        {(item) => (
+          <React.Fragment key={item.id}>
+            <Box flexShrink={0}>
+              <Text bold>Cli Agent</Text>
+            </Box>
+            <Box flexShrink={0}>
+              <Text dimColor>
+                {cwd}
+                {branch ? ` · ${branch}` : ""}
+              </Text>
+            </Box>
+          </React.Fragment>
+        )}
+      </Static>
+    </Box>
   );
 };
