@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import dotenv from "dotenv";
 const result = dotenv.config({ path: "../.env" });
 if (result.parsed) {

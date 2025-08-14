@@ -12,7 +12,7 @@ export const StatusIndicator: React.FC<{
 
     const interval = setInterval(() => {
       setFrame((prev) => (prev + 1) % anim.length);
-    }, 100);
+    }, 300);
     return () => clearInterval(interval);
   }, [status]);
 
