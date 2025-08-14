@@ -12,8 +12,24 @@ import { App } from "@/cli";
 import { toolsSet1 } from "@/toolsSet1";
 import { ModelName, models } from "@/agent/models";
 
-const THREAD_ID = process.env.THREAD_ID ?? "default";
-let defaultModel = process.env.DEFAULT_MODEL;
+// Simple argument parsing
+const args = process.argv.slice(2);
+let threadIdArg: string | undefined;
+let modelArg: string | undefined;
+
+for (let i = 0; i < args.length; i++) {
+  if ((args[i] === "-n" || args[i] === "--name") && args[i + 1]) {
+    threadIdArg = args[i + 1];
+    i++;
+  }
+  if ((args[i] === "-m" || args[i] === "--model") && args[i + 1]) {
+    modelArg = args[i + 1];
+    i++;
+  }
+}
+
+const THREAD_ID = threadIdArg || process.env.THREAD_ID || "default";
+let defaultModel = modelArg || process.env.DEFAULT_MODEL;
 if (!defaultModel || !Object.keys(models).includes(defaultModel)) {
   defaultModel = "gpt5MiniHigh";
 }

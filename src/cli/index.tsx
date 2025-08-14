@@ -11,6 +11,7 @@ import { MessageView } from "@/cli/messages";
 import { StatusIndicator } from "@/cli/status-indicator";
 import { Footer } from "@/cli/footer";
 import { db, loadMessages, appendMessage, clearThread } from "@/db";
+import { v4 } from "uuid";
 
 export const App: React.FC<{
   model: ModelName;
@@ -41,8 +42,6 @@ export const App: React.FC<{
       return;
     }
 
-    setBusyStatus("Processing");
-
     let userMsg: HumanMessage | null = new HumanMessage({ content: trimmed });
 
     if (!trimmed) {
@@ -52,7 +51,6 @@ export const App: React.FC<{
           content: "Please enter a message to continue!",
         });
         setAllMessages((prev) => [...prev, userMsg!, failedAIMsg]);
-        setBusyStatus(null);
         return;
       } else if (lastMsg?.getType() === "ai") {
         userMsg = new HumanMessage({ content: "Continue" });
@@ -60,7 +58,12 @@ export const App: React.FC<{
         userMsg = null;
       }
     }
-    if (userMsg) await appendMessage(db, historyPath, userMsg);
+
+    setBusyStatus("Processing");
+    if (userMsg) {
+      setActiveMessages((prev) => [...prev, userMsg]);
+      await appendMessage(db, historyPath, userMsg);
+    }
 
     let syncedMessages: BaseMessage[] = [];
     await invokeAgent(
@@ -69,7 +72,7 @@ export const App: React.FC<{
       { historyPath },
       (messages, status = "Thinking") => {
         syncedMessages = messages;
-        setActiveMessages(messages.slice(allMessages.length - 1));
+        setActiveMessages(messages.slice(allMessages.length));
         setBusyStatus(status);
       },
     );
@@ -93,7 +96,7 @@ export const App: React.FC<{
         <Static items={history}>
           {(msg) => (
             <MessageView
-              key={msg.id}
+              key={(msg.id || "") + v4()}
               message={msg}
               isFirst={msg.id === history[0].id}
               isLast={msg.id === history[history.length - 1].id}
@@ -104,7 +107,7 @@ export const App: React.FC<{
       <Box flexDirection="column" paddingBottom={2}>
         {activeMessages.map((item) => (
           <MessageView
-            key={item.id}
+            key={(item.id || "") + v4()}
             message={item}
             isFirst={item.id === activeMessages[0].id}
             isLast={item.id === activeMessages[activeMessages.length - 1].id}

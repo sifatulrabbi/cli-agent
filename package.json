@@ -18,10 +18,11 @@
     "ink-text-input": "^6.0.0",
     "langchain": "^0.3.30",
     "lodash": "^4.17.21",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "openai": "^5.12.2",
     "react": "^19.1.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "uuid": "^11.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

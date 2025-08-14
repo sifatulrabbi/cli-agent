@@ -6,6 +6,7 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import React from "react";
+import { v4 } from "uuid";
 
 export const RoleBadge: React.FC<{ message: BaseMessage }> = ({ message }) => {
   const user = message instanceof HumanMessage;
@@ -65,7 +66,7 @@ const RenderMsgContent: React.FC<{
   // TODO: show till the edge of the screen
   return textChunks.map((chunk, idx) => (
     <Text
-      key={idx.toString() + chunk.text}
+      key={idx.toString() + chunk.text + v4()}
       wrap="wrap"
       dimColor={chunk.type !== "text"}
     >
@@ -79,7 +80,7 @@ const HumanMessageView: React.FC<{
   message: HumanMessage;
 }> = ({ message }) => {
   return (
-    <Box paddingTop={1} paddingRight={3} paddingLeft={3}>
+    <Box paddingTop={1} paddingRight={3} paddingLeft={3} minHeight={1}>
       <Box
         paddingLeft={1}
         paddingRight={1}
@@ -141,7 +142,7 @@ const AIMessageView: React.FC<{
             <SectionHeader title="tool calls" color="blue" />
             {toolCalls.map((tc, idx) => (
               <Box
-                key={(tc.id ?? idx).toString()}
+                key={(tc.id ?? idx).toString() + v4()}
                 flexDirection="column"
                 paddingLeft={2}
               >
