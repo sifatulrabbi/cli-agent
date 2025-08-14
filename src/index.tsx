@@ -7,4 +7,4 @@ import { toolsSet1 } from "@/toolsSet1";
 
 const HISTORY_PATH = "testBench/local-testing.json";
 
-render(<App model="gptOss120b" historyPath={HISTORY_PATH} tools={toolsSet1} />);
+render(<App model="gpt41mini" historyPath={HISTORY_PATH} tools={toolsSet1} />);

@@ -1,5 +1,5 @@
 import path from "path";
-import { TESTING_DIR, ACTIVE_PROJECT_DIR } from "../configs";
+import { TESTING_DIR, ACTIVE_PROJECT_DIR } from "@/configs";
 import {
   createEntityTool,
   listProjectFilesTool,
@@ -34,7 +34,7 @@ main();`;
   });
   console.log("Result:", result);
 }
-// await createNewFileTest();
+await createNewFileTest();
 
 async function insertIntoFileTest() {
   const content = `import fs from "fs";
@@ -55,7 +55,7 @@ function main() {
   });
   console.log("Patch Result:", result);
 }
-// await insertIntoFileTest();
+await insertIntoFileTest();
 
 async function patchFileTest() {
   const content = `  const f = fs.readFileSync("test.txt", "utf8");
@@ -72,7 +72,7 @@ async function patchFileTest() {
   });
   console.log("Patch Result:", result);
 }
-// await patchFileTest();
+await patchFileTest();
 
 async function readFilesTest() {
   const result = await readFilesTool.invoke({
@@ -80,4 +80,4 @@ async function readFilesTest() {
   });
   console.log("Result:\n%s", result);
 }
-// await readFilesTest();
+await readFilesTest();

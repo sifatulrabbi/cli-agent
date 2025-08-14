@@ -1,6 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { toolsSet1 } from "@/toolsSet1";
-import { invokeDebuggerAgent as invokeAgent } from "@/agent";
+import { invokeAgent as invokeAgent } from "@/agent";
 import { ensureHistoryFileExists } from "@/utils";
 
 const llm = new ChatOpenAI({

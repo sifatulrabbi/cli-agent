@@ -7,35 +7,6 @@ import {
 } from "@langchain/core/messages";
 import React from "react";
 
-function formatJson(input: unknown): string {
-  try {
-    return JSON.stringify(input, null, 2);
-  } catch {
-    return String(input);
-  }
-}
-
-function stringifyContent(content: any): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    const parts: string[] = [];
-    for (const c of content) {
-      if (
-        c &&
-        typeof c === "object" &&
-        "type" in c &&
-        (c as any).type === "text"
-      ) {
-        parts.push((c as any).text ?? "");
-      } else {
-        parts.push(formatJson(c));
-      }
-    }
-    return parts.filter(Boolean).join("\n");
-  }
-  return formatJson(content);
-}
-
 export const RoleBadge: React.FC<{ message: BaseMessage }> = ({ message }) => {
   const user = message instanceof HumanMessage;
   const ai = message instanceof AIMessage;
@@ -66,6 +37,46 @@ const SectionHeader: React.FC<{ title: string; color?: string }> = ({
   </Box>
 );
 
+const RenderMsgContent: React.FC<{
+  content: any;
+}> = ({ content }) => {
+  const textChunks: { text: string; type: string }[] = [];
+
+  if (typeof content === "string") {
+    textChunks.push({ type: "text", text: content });
+  } else if (Array.isArray(content)) {
+    for (const c of content) {
+      if (!c) continue;
+      if (typeof c === "string") {
+        textChunks.push({ type: "text", text: c });
+        continue;
+      }
+      if (typeof c === "object" && "type" in c) {
+        if ((c as any).type === "text") {
+          textChunks.push({ type: "text", text: (c as any).text ?? "" });
+        } else if ((c as any).type === "image_url") {
+          textChunks.push({
+            type: "image",
+            text: (c as any).image_url?.url ?? "[Image file]",
+          });
+        }
+      }
+    }
+  }
+
+  return textChunks.map((chunk, idx) => (
+    // TODO: show till the edge of the screen
+    <Text
+      key={idx.toString() + chunk.text}
+      wrap="wrap"
+      dimColor={chunk.type !== "text"}
+    >
+      {chunk.type !== "text" ? " [" + chunk.type.toUpperCase() + "] " : ""}
+      {chunk.type !== "text" ? chunk.text.slice(0, 80) : chunk.text}
+    </Text>
+  ));
+};
+
 export const MessageView: React.FC<{
   message: BaseMessage;
   isFirst?: boolean;
@@ -82,7 +93,7 @@ export const MessageView: React.FC<{
           borderStyle="single"
           width={"100%"}
         >
-          <Text wrap="wrap">{stringifyContent(message.content).trim()}</Text>
+          <RenderMsgContent content={message.content} />
         </Box>
       </Box>
     );
@@ -109,6 +120,7 @@ export const MessageView: React.FC<{
       <Box flexDirection="column" paddingLeft={1}>
         <Box>
           <RoleBadge message={message} />
+
           <Box flexDirection="column">
             {reasoningTexts.length ? (
               <>
@@ -120,11 +132,11 @@ export const MessageView: React.FC<{
                 </Box>
               </>
             ) : null}
+
             {message.content ? (
-              <Text wrap="wrap">
-                {stringifyContent(message.content).trim()}
-              </Text>
+              <RenderMsgContent content={message.content} />
             ) : null}
+
             {toolCalls.length > 0 ? (
               <>
                 <SectionHeader title="tool calls" color="blue" />
@@ -159,8 +171,8 @@ export const MessageView: React.FC<{
                 message.status === "error"
                   ? "red"
                   : message.status === "success"
-                  ? "green"
-                  : "yellow"
+                    ? "green"
+                    : "yellow"
               }
             >
               {message.status || "unknown"}

@@ -25,10 +25,12 @@ export const models = {
   gpt41mini: new ChatOpenAI({
     model: "gpt-4.1-mini",
     useResponsesApi: true,
+    streamUsage: true,
   }),
   gpt41: new ChatOpenAI({
     model: "gpt-4.1",
     useResponsesApi: true,
+    streamUsage: true,
   }),
   gptOss120b: new ChatOpenAI({
     model: "gpt-oss-120b",
@@ -39,20 +41,22 @@ export const models = {
     configuration: {
       baseURL: "https://openrouter.ai/api/v1",
     },
+    streamUsage: true,
   }),
   gptOss20bLocal: new ChatOpenAI({
     model: "openai/gpt-oss-20b",
     modelKwargs: {
       reasoning_effort: "high",
     },
-    // apiKey: process.env.OPENROUTER_API_KEY,
     configuration: {
       baseURL: "http://127.0.0.1:8089/v1",
     },
+    streamUsage: true,
   }),
   codexMini: new ChatOpenAI({
     model: "codex-mini",
     useResponsesApi: true,
+    streamUsage: true,
   }),
   o4MiniHigh: new ChatOpenAI({
     model: "o4-mini",
@@ -61,6 +65,7 @@ export const models = {
       summary: "auto",
     },
     useResponsesApi: true,
+    streamUsage: true,
   }),
   gpt5: new ChatOpenAI({
     model: "gpt-5",
@@ -69,6 +74,7 @@ export const models = {
       summary: "auto",
     },
     useResponsesApi: true,
+    streamUsage: true,
   }),
   gpt5High: new ChatOpenAI({
     model: "gpt-5",
@@ -77,6 +83,7 @@ export const models = {
       summary: "auto",
     },
     useResponsesApi: true,
+    streamUsage: true,
   }),
   gpt5MiniHigh: new ChatOpenAI({
     model: "gpt-5-mini",
@@ -85,6 +92,7 @@ export const models = {
       summary: "auto",
     },
     useResponsesApi: true,
+    streamUsage: true,
   }),
 };
 
@@ -140,7 +148,9 @@ function callModelFactory(
     ];
 
     try {
-      const stream = await llm.bindTools(tools).stream(messages);
+      const stream = await llm.bindTools(tools).stream(messages, {
+        stream_options: { include_usage: true },
+      });
       let finalResponse: AIMessage | undefined = undefined;
       let response: AIMessageChunk | undefined = undefined;
       for await (const chunk of stream) {
@@ -272,7 +282,7 @@ export function loadHistory(historyPath: string): BaseMessage[] {
   return history;
 }
 
-export async function invokeDebuggerAgent(
+export async function invokeAgent(
   llm: keyof typeof models,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,

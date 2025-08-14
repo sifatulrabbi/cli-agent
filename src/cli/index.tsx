@@ -3,7 +3,7 @@ import { Box, useApp } from "ink";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { loadHistory, ModelName } from "@/agent";
-import { invokeDebuggerAgent } from "@/agent";
+import { invokeAgent } from "@/agent";
 import { clearHistory } from "@/agent";
 import { addMsgToHistory } from "@/agent";
 import { HeaderBar } from "@/cli/header";
@@ -12,6 +12,7 @@ import { Hr } from "@/cli/hr";
 import { Input } from "@/cli/input";
 import { MessageView } from "@/cli/messages";
 import { StatusIndicator } from "@/cli/status-indicator";
+import { Footer } from "@/cli/footer";
 
 export const App: React.FC<{
   model: ModelName;
@@ -57,7 +58,7 @@ export const App: React.FC<{
     }
     if (userMsg) addMsgToHistory(historyPath, userMsg);
 
-    invokeDebuggerAgent(
+    invokeAgent(
       model,
       tools,
       { historyPath },
@@ -74,7 +75,7 @@ export const App: React.FC<{
     <FullHeight>
       <HeaderBar />
       <Hr />
-      <Box flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column" flexGrow={1} paddingBottom={2}>
         {messages.map((m, idx) => (
           <MessageView
             key={m.id ?? idx}
@@ -85,7 +86,15 @@ export const App: React.FC<{
         ))}
       </Box>
       <StatusIndicator status={busyStatus} />
-      <Input onSubmit={onSubmit} busyStatus={busyStatus} model={model} />
+      <Box
+        flexDirection="column"
+        flexShrink={0}
+        paddingLeft={3}
+        paddingRight={3}
+      >
+        <Input onSubmit={onSubmit} busyStatus={busyStatus} />
+        <Footer model={model} messages={messages} />
+      </Box>
     </FullHeight>
   );
 };
