@@ -5,6 +5,6 @@ import { render } from "ink";
 import { App } from "@/cli";
 import { toolsSet1 } from "@/toolsSet1";
 
-const HISTORY_PATH = "testBench/local-testing.json";
+const THREAD_ID = process.env.THREAD_ID ?? "default";
 
-render(<App model="gpt41mini" historyPath={HISTORY_PATH} tools={toolsSet1} />);
+render(<App model="gpt41mini" historyPath={THREAD_ID} tools={toolsSet1} />);

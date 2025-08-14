@@ -1,7 +1,6 @@
 import { ChatOpenAI, ChatOpenAIResponses } from "@langchain/openai";
 import {
   SystemMessage,
-  HumanMessage,
   BaseMessage,
   ToolMessage,
   AIMessage,
@@ -10,7 +9,7 @@ import {
 import { StateGraph, START, MessagesAnnotation } from "@langchain/langgraph";
 import { toolsCondition } from "@langchain/langgraph/prebuilt";
 import { DynamicStructuredTool } from "langchain/tools";
-import fs from "fs";
+import { db, loadMessages, saveMessages } from "@/db";
 import { tryCatch } from "@/utils";
 import { concat } from "@langchain/core/utils/stream";
 import { logger } from "@/logger";
@@ -94,6 +93,25 @@ export const models = {
     useResponsesApi: true,
     streamUsage: true,
   }),
+  gptOss20bHigh: new ChatOpenAI({
+    model: "openai/gpt-oss-20b",
+    modelKwargs: {
+      reasoning_effort: "high",
+    },
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "https://openrouter.ai/api/v1",
+    },
+    streamUsage: true,
+  }),
+  zAiGlm45: new ChatOpenAI({
+    model: "z-ai/glm-4.5v",
+    apiKey: process.env.OPENROUTER_API_KEY,
+    configuration: {
+      baseURL: "https://openrouter.ai/api/v1",
+    },
+    streamUsage: true,
+  }),
 };
 
 export type ModelName = keyof typeof models;
@@ -129,10 +147,10 @@ function callModelFactory(
   llm: ChatOpenAI | ChatOpenAIResponses,
   sysMsg: SystemMessage,
   tools: DynamicStructuredTool[],
-  updateHistory: (messages: BaseMessage[], status?: string) => void,
+  renderUpdates: (messages: BaseMessage[], status?: string) => void,
 ) {
   return async function (state: typeof MessagesAnnotation.State) {
-    updateHistory(state.messages, "Thinking");
+    renderUpdates(state.messages, "Thinking");
 
     const messages = [
       sysMsg,
@@ -165,7 +183,7 @@ function callModelFactory(
             invalid_tool_calls: response.invalid_tool_calls,
             additional_kwargs: response.additional_kwargs,
           });
-          updateHistory([...state.messages, finalResponse], "Thinking");
+          renderUpdates([...state.messages, finalResponse], "Thinking");
         }
       }
 
@@ -188,7 +206,7 @@ function callModelFactory(
         additional_kwargs: response.additional_kwargs,
       });
 
-      updateHistory([...state.messages, finalResponse], "Thinking");
+      renderUpdates([...state.messages, finalResponse], "Thinking");
 
       return { messages: [finalResponse] };
     } catch (error) {
@@ -202,7 +220,7 @@ function callModelFactory(
 
 function customToolNode(
   tools: DynamicStructuredTool[],
-  updateHistory: (messages: BaseMessage[], status?: string) => void,
+  renderUpdates: (messages: BaseMessage[], status?: string) => void,
 ) {
   return async function (state: typeof MessagesAnnotation.State) {
     const aiMsg = state.messages.at(-1) as AIMessage;
@@ -210,7 +228,11 @@ function customToolNode(
     for (const toolCall of aiMsg.tool_calls ?? []) {
       const tool = tools.find((t) => t.name === toolCall.name);
       if (tool) {
-        updateHistory(state.messages, `Using ${tool.name}...`);
+        renderUpdates(
+          [...state.messages, ...toolMessages],
+          `Executing ${tool.name}`,
+        );
+
         const { data: result, error } = await tryCatch(
           tool.invoke(toolCall.args),
         );
@@ -228,82 +250,46 @@ function customToolNode(
         });
         console.error(error);
         toolMessages.push(msg);
+      } else {
+        const notFoundToolMsg = new ToolMessage({
+          content: `Tool '${toolCall.name}' not found`,
+          tool_call_id: toolCall.id ?? "",
+          name: toolCall.name,
+          status: "error",
+        });
+        toolMessages.push(notFoundToolMsg);
+        renderUpdates(
+          [...state.messages, ...toolMessages],
+          `Not found '${toolCall.name}'`,
+        );
       }
     }
 
-    updateHistory(state.messages, "Using tools");
+    renderUpdates(
+      [...state.messages, ...toolMessages],
+      "Analyzing tool results",
+    );
     return { messages: [...toolMessages] };
   };
-}
-
-function syncHistory(historyPath: string, messages: BaseMessage[]) {
-  fs.writeFileSync(
-    historyPath,
-    JSON.stringify(
-      messages.map((msg) => msg.toJSON()),
-      null,
-      2,
-    ),
-  );
-}
-
-export function loadHistory(historyPath: string): BaseMessage[] {
-  let history: BaseMessage[] = [];
-  if (fs.existsSync(historyPath)) {
-    try {
-      const raw = fs.readFileSync(historyPath, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        history = parsed.map((entry: any) => {
-          const typeId: string | undefined = entry?.id?.[2];
-          const kwargs = entry?.kwargs ?? {};
-          switch (typeId) {
-            case "HumanMessage":
-              return new HumanMessage(kwargs);
-            case "AIMessageChunk":
-            case "AIMessage":
-              return new AIMessage(kwargs);
-            case "ToolMessageChunk":
-            case "ToolMessage":
-              return new ToolMessage(kwargs);
-            case "SystemMessage":
-              return new SystemMessage(kwargs);
-            default:
-              throw new Error(
-                `Unsupported message type in history: ${String(typeId)}`,
-              );
-          }
-        });
-      }
-    } catch {
-      history = [];
-    }
-  }
-  return history;
 }
 
 export async function invokeAgent(
   llm: keyof typeof models,
   tools: DynamicStructuredTool[],
   options: DebuggerAgentOptions,
-  updateHistory: (messages: BaseMessage[], status?: string | null) => void,
+  renderUpdate: (messages: BaseMessage[], status?: string | null) => void,
 ) {
+  const history = await loadMessages(db, options.historyPath);
+  renderUpdate(history, "Thinking");
+
   const system = new SystemMessage({
     content: (options.systemInstruction ?? defaultSystemInstruction()).trim(),
   });
-  const history: BaseMessage[] = loadHistory(options.historyPath);
-
-  function sync(messages: BaseMessage[], status?: string) {
-    updateHistory(messages, status);
-    syncHistory(options.historyPath, messages);
-  }
-
-  sync(history, "Thinking");
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("llm", callModelFactory(models[llm], system, tools, sync))
-    .addNode("tools", customToolNode(tools, sync))
-    .addConditionalEdges(START, (state) => {
+    .addNode("llm", callModelFactory(models[llm], system, tools, renderUpdate))
+    .addNode("tools", customToolNode(tools, renderUpdate))
+    .addConditionalEdges(START, async (state) => {
       if (state.messages.at(-1)?.getType() === "ai") {
         const lastMsg = state.messages.at(-1) as AIMessage;
         if (lastMsg.tool_calls && lastMsg.tool_calls.length > 0) {
@@ -312,25 +298,27 @@ export async function invokeAgent(
       }
       return "llm";
     })
-    .addConditionalEdges("llm", toolsCondition)
-    .addEdge("tools", "llm")
+    .addConditionalEdges("llm", async (state) => {
+      renderUpdate(state.messages, "Thinking");
+      await saveMessages(db, options.historyPath, state.messages);
+      return toolsCondition(state);
+    })
+    .addConditionalEdges("tools", async (state) => {
+      renderUpdate(state.messages, "Using tools");
+      await saveMessages(db, options.historyPath, state.messages);
+      return "llm";
+    })
     .compile();
 
   const result = await graph.invoke(
     { messages: history },
-    { recursionLimit: 10 ** 10 },
+    {
+      recursionLimit: 10 ** 10,
+      configurable: { thread_id: options.historyPath },
+    },
   );
 
-  sync(result.messages, "finalizing");
+  await saveMessages(db, options.historyPath, result.messages);
+  renderUpdate(result.messages, "Finalizing");
   return result;
 }
-
-export function addMsgToHistory(historyPath: string, msg: BaseMessage) {
-  const history = loadHistory(historyPath);
-  history.push(msg);
-  syncHistory(historyPath, history);
-}
-
-export const clearHistory = (historyPath: string) => {
-  fs.writeFileSync(historyPath, "[]");
-};

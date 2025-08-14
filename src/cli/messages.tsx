@@ -171,11 +171,11 @@ export const MessageView: React.FC<{
                 message.status === "error"
                   ? "red"
                   : message.status === "success"
-                    ? "green"
-                    : "yellow"
+                  ? "green"
+                  : "yellow"
               }
             >
-              {message.status || "unknown"}
+              {message.status || "executing..."}
             </Text>
           </Box>
         </Box>

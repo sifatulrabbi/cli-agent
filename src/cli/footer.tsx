@@ -1,10 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import {
-  AIMessage,
-  AIMessageChunk,
-  BaseMessage,
-} from "@langchain/core/messages";
+import { BaseMessage } from "@langchain/core/messages";
 
 const modelInfo: Record<string, { description: string }> = {
   gpt41mini: {

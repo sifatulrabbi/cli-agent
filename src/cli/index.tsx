@@ -1,11 +1,9 @@
 import React from "react";
 import { Box, useApp } from "ink";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { loadHistory, ModelName } from "@/agent";
+import { ModelName } from "@/agent";
 import { invokeAgent } from "@/agent";
-import { clearHistory } from "@/agent";
-import { addMsgToHistory } from "@/agent";
 import { HeaderBar } from "@/cli/header";
 import { FullHeight } from "@/cli/full-height";
 import { Hr } from "@/cli/hr";
@@ -13,6 +11,7 @@ import { Input } from "@/cli/input";
 import { MessageView } from "@/cli/messages";
 import { StatusIndicator } from "@/cli/status-indicator";
 import { Footer } from "@/cli/footer";
+import { db, loadMessages, appendMessage, clearThread } from "@/db";
 
 export const App: React.FC<{
   model: ModelName;
@@ -20,14 +19,14 @@ export const App: React.FC<{
   tools: DynamicStructuredTool[];
 }> = ({ model, historyPath, tools }) => {
   const { exit } = useApp();
-  const [messages, setMessages] = React.useState(loadHistory(historyPath));
+  const [messages, setMessages] = React.useState<BaseMessage[]>([]);
   const [busyStatus, setBusyStatus] = React.useState<string | null>(null);
 
-  const onSubmit = (inputValue: string) => {
+  const onSubmit = async (inputValue: string) => {
     const trimmed = inputValue.trim();
     if (trimmed === "/clear") {
       setBusyStatus("Clearing");
-      clearHistory(historyPath);
+      await clearThread(db, historyPath);
       setMessages([]);
       setBusyStatus(null);
       return;
@@ -56,9 +55,9 @@ export const App: React.FC<{
         userMsg = null;
       }
     }
-    if (userMsg) addMsgToHistory(historyPath, userMsg);
+    if (userMsg) await appendMessage(db, historyPath, userMsg);
 
-    invokeAgent(
+    await invokeAgent(
       model,
       tools,
       { historyPath },
@@ -66,10 +65,16 @@ export const App: React.FC<{
         setMessages(messages);
         setBusyStatus(status);
       },
-    ).finally(() => {
-      setBusyStatus(null);
-    });
+    );
+    setBusyStatus(null);
   };
+
+  React.useEffect(() => {
+    setBusyStatus("Loading");
+    loadMessages(db, historyPath)
+      .then(setMessages)
+      .finally(() => setBusyStatus(null));
+  }, []);
 
   return (
     <FullHeight>
