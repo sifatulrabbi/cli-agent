@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, useApp } from "ink";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { loadHistory, ModelName } from "@/agent";
 import { invokeDebuggerAgent } from "@/agent";
@@ -36,9 +36,27 @@ export const App: React.FC<{
       return;
     }
 
-    const userMsg = new HumanMessage({ content: trimmed });
     setBusyStatus("Processing");
-    addMsgToHistory(historyPath, userMsg);
+
+    let userMsg: HumanMessage | null = new HumanMessage({ content: trimmed });
+
+    if (!trimmed) {
+      const lastMsg = messages.at(-1);
+      if (!lastMsg) {
+        const failedAIMsg = new AIMessage({
+          content: "Please enter a message to continue!",
+        });
+        setMessages((prev) => [...prev, userMsg!, failedAIMsg]);
+        setBusyStatus(null);
+        return;
+      } else if (lastMsg?.getType() === "ai") {
+        userMsg = new HumanMessage({ content: "Continue" });
+      } else {
+        userMsg = null;
+      }
+    }
+    if (userMsg) addMsgToHistory(historyPath, userMsg);
+
     invokeDebuggerAgent(
       model,
       tools,
