@@ -1,13 +1,21 @@
 import fs from "fs";
 import { DEFAULT_LOGGING_PATH } from "@/configs";
+import path from "path";
 
 class LibLogger {
-  constructor(readonly logPath = DEFAULT_LOGGING_PATH) {
+  public readonly logFilePath: string;
+
+  constructor(logDirPath = DEFAULT_LOGGING_PATH) {
     // making sure the dir exists
     try {
-      fs.readdirSync(logPath);
+      fs.readdirSync(logDirPath);
     } catch {
-      fs.mkdirSync(logPath, { recursive: true });
+      fs.mkdirSync(logDirPath, { recursive: true });
+    }
+
+    this.logFilePath = path.join(logDirPath, "log.txt");
+    if (!fs.existsSync(this.logFilePath)) {
+      fs.writeFileSync(this.logFilePath, "");
     }
   }
 
@@ -17,7 +25,7 @@ class LibLogger {
     for (const arg of args) {
       logEntry += JSON.stringify(arg, null, 2) + "\n";
     }
-    fs.appendFileSync(this.logPath, logEntry);
+    fs.appendFileSync(this.logFilePath, logEntry);
   }
 
   error(...args: any[]) {
@@ -26,7 +34,7 @@ class LibLogger {
     for (const arg of args) {
       logEntry += JSON.stringify(arg, null, 2) + "\n";
     }
-    fs.appendFileSync(this.logPath, logEntry);
+    fs.appendFileSync(this.logFilePath, logEntry);
   }
 }
 

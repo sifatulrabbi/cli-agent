@@ -17,7 +17,7 @@ export const FullHeight: React.FC<{ children: React.ReactNode }> = ({
   }, [stdout]);
 
   return (
-    <Box flexDirection="column" minHeight={rows - 1} justifyContent="flex-end">
+    <Box flexDirection="column" minHeight={rows - 1}>
       {children}
     </Box>
   );

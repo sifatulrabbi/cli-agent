@@ -58,13 +58,7 @@ export const Input: React.FC<{
   });
 
   return (
-    <Box
-      flexDirection="column"
-      flexGrow={1}
-      flexShrink={0}
-      paddingLeft={3}
-      paddingRight={3}
-    >
+    <Box flexDirection="column" flexShrink={0} paddingLeft={3} paddingRight={3}>
       <Box flexShrink={0} borderColor="white" borderStyle="single">
         <Text>› </Text>
         <Text dimColor={!input}>{input || "Enter your message"}</Text>
