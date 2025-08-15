@@ -32,9 +32,10 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const THREAD_ID = threadIdArg || process.env.THREAD_ID || "default";
-let defaultModel = modelArg || process.env.DEFAULT_MODEL;
+let defaultModel: ModelName = (modelArg ||
+  process.env.DEFAULT_MODEL) as ModelName;
 if (!defaultModel || !Object.keys(models).includes(defaultModel)) {
-  defaultModel = "gpt5MiniHigh";
+  defaultModel = "gpt41mini";
 }
 
 render(

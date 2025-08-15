@@ -7,7 +7,7 @@ export const HeaderBar: React.FC = () => {
     <Box flexDirection="column">
       <Static items={[{ id: "cli-agent-header" }]}>
         {() => (
-          <Box flexShrink={0} key="cli-agent-header">
+          <Box key="cli-agent-header" flexDirection="column">
             <Text bold>Cli Agent</Text>
             <Hr />
           </Box>
