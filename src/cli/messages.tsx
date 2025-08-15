@@ -4,6 +4,8 @@ import {
   HumanMessage,
   AIMessage,
   ToolMessage,
+  AIMessageChunk,
+  ToolMessageChunk,
 } from "@langchain/core/messages";
 import React from "react";
 import { v4 } from "uuid";
@@ -157,16 +159,16 @@ const AIMessageView: React.FC<{
 };
 
 const ToolMessageView: React.FC<{
-  message: ToolMessage;
+  message: ToolMessage | ToolMessageChunk;
 }> = ({ message }) => {
-  const toolName = message.name as string | undefined;
+  const toolName = message.name || "unknown tool";
 
   return (
     <Box paddingTop={1} paddingRight={3} paddingLeft={3}>
       <Box>
         <RoleBadge message={message} />
         <Box flexDirection="row" gap={1}>
-          <Text dimColor>↳ {toolName ?? "unknown"}</Text>
+          <Text dimColor>↳ {toolName}</Text>
           <Text dimColor>{"->"}</Text>
           <Text
             dimColor
@@ -174,8 +176,8 @@ const ToolMessageView: React.FC<{
               message.status === "error"
                 ? "red"
                 : message.status === "success"
-                ? "green"
-                : "yellow"
+                  ? "green"
+                  : "yellow"
             }
           >
             {message.status || "executing..."}
@@ -198,9 +200,10 @@ export const MessageView: React.FC<{
     <Box flexDirection="column" width={cols} flexWrap="wrap">
       {message instanceof HumanMessage ? (
         <HumanMessageView message={message} />
-      ) : message instanceof AIMessage ? (
+      ) : message instanceof AIMessage || message instanceof AIMessageChunk ? (
         <AIMessageView message={message} />
-      ) : message instanceof ToolMessage ? (
+      ) : message instanceof ToolMessage ||
+        message instanceof ToolMessageChunk ? (
         <ToolMessageView message={message} />
       ) : null}
     </Box>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, useStdout, Static } from "ink";
+import { Box, Text, useStdout } from "ink";
 
 export const Hr: React.FC<{ char?: string; color?: string }> = ({
   char = "─",
@@ -18,12 +18,8 @@ export const Hr: React.FC<{ char?: string; color?: string }> = ({
   }, [stdout]);
 
   return (
-    <Static items={[{ id: "hr" }]}>
-      {(item) => (
-        <Box key={item.id}>
-          <Text color={color}>{char.repeat(Math.max(0, cols))}</Text>
-        </Box>
-      )}
-    </Static>
+    <Box>
+      <Text color={color}>{char.repeat(Math.max(0, cols))}</Text>
+    </Box>
   );
 };

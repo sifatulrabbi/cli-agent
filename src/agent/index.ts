@@ -25,15 +25,15 @@ export type DebuggerAgentOptions = {
 
 function callModelFactory(
   llm: ChatOpenAI | ChatOpenAIResponses,
-  sysMsg: SystemMessage,
   tools: DynamicStructuredTool[],
   renderUpdates: (messages: BaseMessage[], status?: string) => void,
 ) {
   return async function (state: typeof MessagesAnnotation.State) {
-    renderUpdates(state.messages, "Thinking");
-
+    const system = new SystemMessage({
+      content: defaultSystemInstruction().trim(),
+    });
     const messages = [
-      sysMsg,
+      system,
       ...state.messages.map((msg) => {
         if (msg.getType() === "ai") {
           const aiMsg = msg as AIMessage;
@@ -46,11 +46,22 @@ function callModelFactory(
     ];
 
     try {
+      let finalResponse: AIMessage | undefined = undefined;
+      let response: AIMessageChunk | undefined = undefined;
+      let lastRender = Date.now();
+
+      renderUpdates(
+        [
+          ...state.messages,
+          new AIMessage({ content: "Processing your request..." }),
+        ],
+        "Thinking",
+      );
+
       const stream = await llm.bindTools(tools).stream(messages, {
         stream_options: { include_usage: true },
       });
-      let finalResponse: AIMessage | undefined = undefined;
-      let response: AIMessageChunk | undefined = undefined;
+
       for await (const chunk of stream) {
         response = response !== undefined ? concat(response, chunk) : chunk;
         if (response && response.content) {
@@ -63,7 +74,22 @@ function callModelFactory(
             invalid_tool_calls: response.invalid_tool_calls,
             additional_kwargs: response.additional_kwargs,
           });
-          renderUpdates([...state.messages, finalResponse], "Thinking");
+
+          const now = Date.now();
+          if (now - lastRender >= 200) {
+            renderUpdates([...state.messages, finalResponse], "Thinking");
+            lastRender = now;
+          }
+        } else if (response && response.tool_call_chunks) {
+          renderUpdates(
+            [
+              ...state.messages,
+              new AIMessage({
+                content: "I will make use of the available tools.",
+              }),
+            ],
+            "Making tool calls",
+          );
         }
       }
 
@@ -160,15 +186,38 @@ export async function invokeAgent(
   renderUpdate: (messages: BaseMessage[], status?: string | null) => void,
 ) {
   const history = await loadMessages(db, options.historyPath);
-  renderUpdate(history, "Thinking");
 
-  const system = new SystemMessage({
-    content: (options.systemInstruction ?? defaultSystemInstruction()).trim(),
-  });
+  // INFO: for test only
+  if (
+    history.at(-1)?.getType() === "human" &&
+    history.at(-1)!.content === "/test"
+  ) {
+    renderUpdate(
+      [...history, new AIMessage({ content: "Processing your request..." })],
+      "Thinking",
+    );
+    await new Promise((r) => setTimeout(r, 2000));
+    renderUpdate(
+      [...history, new AIMessage({ content: "Test case update, hello?" })],
+      "Thinking",
+    );
+    await new Promise((r) => setTimeout(r, 2000));
+    renderUpdate(
+      [...history, new AIMessage({ content: "Test case update 2!" })],
+      "Thinking",
+    );
+    await new Promise((r) => setTimeout(r, 2000));
+    renderUpdate(
+      [...history, new AIMessage({ content: "Test case update 3. Done!" })],
+      "Thinking",
+    );
+    return;
+  }
 
   const graph = new StateGraph(MessagesAnnotation)
-    .addNode("llm", callModelFactory(models[llm], system, tools, renderUpdate))
+    .addNode("llm", callModelFactory(models[llm], tools, renderUpdate))
     .addNode("tools", customToolNode(tools, renderUpdate))
+    // workflow
     .addConditionalEdges(START, async (state) => {
       if (state.messages.at(-1)?.getType() === "ai") {
         const lastMsg = state.messages.at(-1) as AIMessage;

@@ -8,6 +8,7 @@ if (result.parsed) {
     ...result.parsed,
   };
 }
+console.clear();
 
 import { render } from "ink";
 import { App } from "@/cli";

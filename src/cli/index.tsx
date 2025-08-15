@@ -1,14 +1,13 @@
 import React from "react";
 import { Box, Static, useApp } from "ink";
-import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { invokeAgent } from "@/agent";
 import type { ModelName } from "@/agent/models";
 import { HeaderBar } from "@/cli/header";
-import { Hr } from "@/cli/hr";
 import { Input } from "@/cli/input";
 import { MessageView } from "@/cli/messages";
-import { StatusIndicator } from "@/cli/status-indicator";
+import { StatusBar } from "@/cli/status-bar";
 import { Footer } from "@/cli/footer";
 import { db, loadMessages, appendMessage, clearThread } from "@/db";
 import { v4 } from "uuid";
@@ -21,64 +20,51 @@ export const App: React.FC<{
   const { exit } = useApp();
   const [busyStatus, setBusyStatus] = React.useState<string | null>(null);
   const [allMessages, setAllMessages] = React.useState<BaseMessage[]>([]);
-  const [activeMessages, setActiveMessages] =
-    React.useState<BaseMessage | null>(null);
-  const history = React.useMemo(() => {
-    if (busyStatus) return [];
-    return allMessages;
-  }, [allMessages, busyStatus]);
+  const [activeMessage, setActiveMessage] = React.useState<BaseMessage | null>(
+    null,
+  );
+  const [infoMsg, setInfoMsg] = React.useState("");
+  const [errorMsg, setErrorMsg] = React.useState("");
 
-  const onSubmit = async (inputValue: string) => {
+  const onSubmit = (inputValue: string) => {
     const trimmed = inputValue.trim();
     if (trimmed === "/clear") {
       setBusyStatus("Clearing");
-      await clearThread(db, historyPath);
-      setAllMessages([]);
-      setActiveMessages(null);
-      setBusyStatus(null);
+      clearThread(db, historyPath).then(() => {
+        setAllMessages([]);
+        setActiveMessage(null);
+        setBusyStatus(null);
+        setInfoMsg("Conversation history cleared.");
+      });
       return;
     }
     if (trimmed === "/exit") {
       exit();
       return;
     }
-
-    let userMsg: HumanMessage | null = new HumanMessage({ content: trimmed });
-
     if (!trimmed) {
-      const lastMsg = activeMessages || allMessages.at(-1);
-      if (!lastMsg) {
-        const failedAIMsg = new AIMessage({
-          content: "Please enter a message to continue!",
-        });
-        setAllMessages((prev) => [...prev, userMsg!, failedAIMsg]);
-        return;
-      } else if (lastMsg?.getType() === "ai") {
-        userMsg = new HumanMessage({ content: "Continue" });
-      } else {
-        userMsg = null;
-      }
+      setErrorMsg("Please enter a message to continue!");
+      return;
     }
 
+    const userMsg = new HumanMessage({ content: trimmed });
     setBusyStatus("Processing");
-    if (userMsg) {
-      setActiveMessages(userMsg);
-      await appendMessage(db, historyPath, userMsg);
-    }
-
-    await invokeAgent(
-      model,
-      tools,
-      { historyPath },
-      (messages, status = "Thinking") => {
-        setBusyStatus(status);
-        setAllMessages(messages.slice(0, messages.length - 1));
-        setActiveMessages(messages.at(-1) ?? null);
-      },
-    );
-    setAllMessages(await loadMessages(db, historyPath));
-    setActiveMessages(null);
-    setBusyStatus(null);
+    setActiveMessage(userMsg);
+    appendMessage(db, historyPath, userMsg).then(() => {
+      invokeAgent(
+        model,
+        tools,
+        { historyPath },
+        (messages, status = "Thinking") => {
+          setBusyStatus(status);
+          setAllMessages(messages.slice(0, messages.length - 1));
+          setActiveMessage(messages.at(-1) ?? null);
+        },
+      ).finally(() => {
+        setActiveMessage(null);
+        setBusyStatus(null);
+      });
+    });
   };
 
   React.useEffect(() => {
@@ -91,9 +77,8 @@ export const App: React.FC<{
   return (
     <>
       <HeaderBar />
-      <Hr />
       <Box flexDirection="column" paddingBottom={2}>
-        <Static items={history}>
+        <Static items={allMessages}>
           {(msg) => (
             <MessageView
               key={(msg.id || "") + v4()}
@@ -104,19 +89,17 @@ export const App: React.FC<{
           )}
         </Static>
       </Box>
-      {activeMessages ? (
+      {activeMessage ? (
         <Box flexDirection="column" paddingBottom={2}>
           <MessageView
-            key={(activeMessages.id || "") + v4()}
-            message={activeMessages}
-            isFirst={activeMessages.id === allMessages[0].id}
-            isLast={
-              activeMessages.id === allMessages[allMessages.length - 1].id
-            }
+            key={(activeMessage.id || "") + v4()}
+            message={activeMessage}
+            isFirst={activeMessage.id === allMessages[0].id}
+            isLast={activeMessage.id === allMessages[allMessages.length - 1].id}
           />
         </Box>
       ) : null}
-      <StatusIndicator status={busyStatus} />
+      <StatusBar status={busyStatus} error={errorMsg} message={infoMsg} />
       <Box
         flexDirection="column"
         flexShrink={0}
@@ -126,10 +109,7 @@ export const App: React.FC<{
         <Input onSubmit={onSubmit} busyStatus={busyStatus} />
         <Footer
           model={model}
-          messages={[
-            ...allMessages,
-            ...(activeMessages ? [activeMessages] : []),
-          ]}
+          messages={[...allMessages, ...(activeMessage ? [activeMessage] : [])]}
         />
       </Box>
     </>

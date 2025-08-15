@@ -139,6 +139,15 @@ export const models = {
     },
     streamUsage: true,
   }),
+  gpt5nanoHigh: new ChatOpenAI({
+    model: "gpt-5-nano",
+    reasoning: {
+      effort: "high",
+      summary: "auto",
+    },
+    useResponsesApi: true,
+    streamUsage: true,
+  }),
 };
 
 export type ModelName = keyof typeof models;

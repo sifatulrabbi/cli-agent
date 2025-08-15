@@ -1,9 +1,3 @@
-import dotenv from "dotenv";
-
-if (!process.env.NODE_ENV) {
-  dotenv.config();
-}
-
 export const WORKSPACE_ROOT = process.cwd();
 export const TESTING_DIR = "/Users/sifatul/coding/cli-agent/testBench/";
 // export const ACTIVE_PROJECT_DIR = "project1"; // gpt-4.1
