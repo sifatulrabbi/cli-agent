@@ -1,5 +1,0 @@
-- This project uses `bun`.
-- Use `function` to declare functions instead of consts.
-- The version of ink.js is 6.x.x (latest version).
-- The project don't use tests so no need to write tests.
-- Do not remove any existing comments from the codebase.
