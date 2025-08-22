@@ -5,13 +5,14 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/sifatulrabbi/tea-play/internals/agent"
 )
 
 type (
@@ -123,7 +124,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			ch := make(chan string, 1024)
+			ch := agent.ChatWithLLM(val)
 			m.ch = ch
 			m.busy = true
 			m.status = "Streaming..."
@@ -133,7 +134,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.buf.String())
 
 			log.Println("invoking llm...")
-			return m, tea.Batch(m.spin.Tick, invokeLLM(ch, val))
+			return m, tea.Batch(m.spin.Tick, waitForChunk(m.ch))
 		}
 
 	case spinner.TickMsg:
@@ -209,19 +210,19 @@ func (m model) View() string {
 	return finalView
 }
 
-func invokeLLM(ch chan string, _ string) tea.Cmd {
-	go func() {
-		defer close(ch)
-		msgChunks := strings.SplitSeq(sampleLongMessage, " ")
-		for chunk := range msgChunks {
-			ch <- (chunk + " ")
-			time.Sleep(time.Millisecond * 10)
-			log.Println("pumping new chunk...")
-		}
-	}()
-
-	return waitForChunk(ch)
-}
+// func invokeLLM(ch chan string, _ string) tea.Cmd {
+// 	go func() {
+// 		defer close(ch)
+// 		msgChunks := strings.SplitSeq(sampleLongMessage, " ")
+// 		for chunk := range msgChunks {
+// 			ch <- (chunk + " ")
+// 			time.Sleep(time.Millisecond * 10)
+// 			log.Println("pumping new chunk...")
+// 		}
+// 	}()
+//
+// 	return waitForChunk(ch)
+// }
 
 func waitForChunk(ch <-chan string) tea.Cmd {
 	return func() tea.Msg {
