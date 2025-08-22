@@ -16,10 +16,10 @@ import (
 )
 
 type (
-	errMsg         string
+	ErrMsg         string
+	InfoMsg        string
 	streamChunkMsg string
 	streamDoneMsg  struct{}
-	resultMsg      struct{}
 )
 
 const (
@@ -43,10 +43,11 @@ type model struct {
 	height int
 	width  int
 
-	ch             <-chan string
-	busy           bool
-	status         string
-	detailedStatus string
+	ch <-chan string
+
+	busy       bool
+	busyStatus string
+	status     string
 
 	buf      strings.Builder
 	input    textinput.Model
@@ -67,12 +68,13 @@ func New() model {
 	sp.Spinner = spinner.Dot
 
 	return model{
-		input:          ti,
-		spin:           sp,
-		viewport:       vp,
-		buf:            strings.Builder{},
-		status:         "",
-		detailedStatus: "",
+		busy:       false,
+		busyStatus: "",
+		status:     "",
+		buf:        strings.Builder{},
+		input:      ti,
+		spin:       sp,
+		viewport:   vp,
 	}
 }
 
@@ -86,7 +88,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 
 		m.viewport.Height = m.height - ROOT_PADDING_Y*2 - 7
-		m.viewport.Width = m.width - ROOT_PADDING_X*2
+		m.viewport.Width = min(m.width-ROOT_PADDING_X*2, 80)
 
 		m.input.Width = max(m.width-(ROOT_PADDING_X*2)-2, 1)
 		return m, nil
@@ -99,7 +101,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "esc":
 			m.input.SetValue("")
-			log.Println("Clicked: esc")
 			return m, nil
 
 		case "enter":
@@ -127,14 +128,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ch := agent.ChatWithLLM(val)
 			m.ch = ch
 			m.busy = true
-			m.status = "Streaming..."
+			m.busyStatus = "Processing…"
 			if _, err := m.buf.WriteString(fmt.Sprintf("USER: %s\nAI: ", val)); err != nil {
 				log.Panicln("Unable to write to the string buffer:", err)
 			}
 			m.viewport.SetContent(m.buf.String())
-
-			log.Println("invoking llm...")
-			return m, tea.Batch(m.spin.Tick, waitForChunk(m.ch))
+			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
 		}
 
 	case spinner.TickMsg:
@@ -145,30 +144,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case resultMsg:
+	case InfoMsg:
 		m.busy = false
-		m.status = successSt.Render("Done!")
+		m.status = successSt.Render(string(msg))
 		return m, nil
 
-	case errMsg:
+	case ErrMsg:
 		m.busy = false
-		m.status = errorSt.Render("Done with error!")
+		m.status = errorSt.Render(string(msg))
 		return m, nil
 
 	case streamChunkMsg:
-		log.Println("Stream ongoing...")
-		m.detailedStatus = "Stream ongoing..."
+		m.busyStatus = "Generating…"
 		m.buf.WriteString(string(msg))
 		isAtBottom := m.viewport.AtBottom()
 		m.viewport.SetContent(m.buf.String())
 		if isAtBottom {
 			m.viewport.GotoBottom()
 		}
-		return m, waitForChunk(m.ch)
+		return m, m.waitForChunk()
 
 	case streamDoneMsg:
-		log.Println("Stream ended.")
-		m.detailedStatus = "Stream ongoing..."
 		isAtBottom := m.viewport.AtBottom()
 		m.viewport.SetContent(m.buf.String())
 		if isAtBottom {
@@ -176,8 +172,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.buf.Reset()
 		m.busy = false
-		m.detailedStatus = "Stream ended"
-		return m, func() tea.Msg { return resultMsg{} }
+		m.busyStatus = ""
+		return m, func() tea.Msg { return InfoMsg("Successfully generated reply from the LLM!") }
 	}
 
 	var inputCmd, viewportCmd tea.Cmd
@@ -191,10 +187,10 @@ func (m model) View() string {
 	header := titleSt.Render("CLI Agent")
 	busyLine := ""
 	if m.busy {
-		busyLine = fmt.Sprintf("%s  Processing...", m.spin.View())
+		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
 	}
 	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
-	controls := helpSt.Render("Esc: clear  -  /exit: quit  -  Enter: submit  -  \\ Enter: linebreaks")
+	controls := helpSt.Render("Enter: submit  •  /exit: quit  •  Esc: clear  •  Linebreaks are not supported")
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
 		Width(max(m.width, 1)).
@@ -210,27 +206,11 @@ func (m model) View() string {
 	return finalView
 }
 
-// func invokeLLM(ch chan string, _ string) tea.Cmd {
-// 	go func() {
-// 		defer close(ch)
-// 		msgChunks := strings.SplitSeq(sampleLongMessage, " ")
-// 		for chunk := range msgChunks {
-// 			ch <- (chunk + " ")
-// 			time.Sleep(time.Millisecond * 10)
-// 			log.Println("pumping new chunk...")
-// 		}
-// 	}()
-//
-// 	return waitForChunk(ch)
-// }
-
-func waitForChunk(ch <-chan string) tea.Cmd {
+func (m model) waitForChunk() tea.Cmd {
 	return func() tea.Msg {
-		if s, ok := <-ch; ok {
-			log.Println("streamChunkMsg(s)")
+		if s, ok := <-m.ch; ok {
 			return streamChunkMsg(s)
 		}
-		log.Println("streamDoneMsg{}")
 		return streamDoneMsg{}
 	}
 }
