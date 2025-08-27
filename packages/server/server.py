@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Generator, Optional
+from typing import AsyncGenerator, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -22,24 +22,23 @@ class ChatRequest(BaseModel):
     input: str
 
 
-app = FastAPI(title="CLI-Agent Python Server", version="0.1.0")
+app = FastAPI(title="CLI-Agent Server", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "PATCH", "DELETE", "PUT"],
     allow_headers=["*"],
 )
 
 
-def _iter_graph_tokens(user_input: str) -> Generator[str, None, None]:
+async def _iter_graph_tokens(user_input: str) -> AsyncGenerator[str, None]:
     accumulated_text = ""
     try:
-        for event in main.graph.stream(
-            {
-                "messages": [{"role": "user", "content": user_input}],
-            }
+        async for event in main.graph.astream(
+            {"messages": [{"role": "user", "content": user_input}]},
+            stream_mode="messages",
         ):
             for value in event.values():
                 try:
@@ -70,20 +69,20 @@ def _format_sse_event(data: str, event: Optional[str] = None) -> bytes:
     return payload.encode("utf-8")
 
 
-@app.get("/healthz")
-def healthz():
+@app.get("/health")
+async def health():
     return {"status": "ok"}
 
 
 @app.post("/chat/sse")
-def chat_sse(req: ChatRequest):
+async def chat_sse(req: ChatRequest):
     if not req.input:
         raise HTTPException(status_code=400, detail="input is required")
 
-    def event_stream() -> Generator[bytes, None, None]:
-        for chunk in _iter_graph_tokens(req.input):
+    async def event_stream() -> AsyncGenerator[bytes, None]:
+        async for chunk in _iter_graph_tokens(req.input):
             yield _format_sse_event(chunk, event="message")
-        yield _format_sse_event("[DONE]", event="done")
+        yield _format_sse_event("", event="done")
 
     headers = {
         "Cache-Control": "no-cache",
@@ -96,12 +95,12 @@ def chat_sse(req: ChatRequest):
 
 
 @app.post("/chat/stream")
-def chat_stream(req: ChatRequest):
+async def chat_stream(req: ChatRequest):
     if not req.input:
         raise HTTPException(status_code=400, detail="input is required")
 
-    def chunk_stream() -> Generator[bytes, None, None]:
-        for chunk in _iter_graph_tokens(req.input):
+    async def chunk_stream() -> AsyncGenerator[bytes, None, None]:
+        async for chunk in _iter_graph_tokens(req.input):
             yield chunk.encode("utf-8")
         yield b"\n[DONE]\n"
 
