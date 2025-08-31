@@ -1,21 +1,12 @@
-import os
-import sys
+from sqlalchemy.ext.asyncio import AsyncSession
+from agent import agent_graph
 from typing import AsyncGenerator, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
-
-
-# Ensure this file's directory is importable so we can import main.py next to us
-CURRENT_DIR = os.path.dirname(__file__)
-if CURRENT_DIR not in sys.path:
-    sys.path.append(CURRENT_DIR)
-
-try:
-    import main
-except Exception as exc:
-    raise RuntimeError("Failed to import main.py for graph streaming") from exc
+from db import get_session
+from db.models import ChatThread
 
 
 class ChatRequest(BaseModel):
@@ -36,7 +27,7 @@ app.add_middleware(
 async def _iter_graph_tokens(user_input: str) -> AsyncGenerator[str, None]:
     accumulated_text = ""
     try:
-        async for event in main.graph.astream(
+        async for event in agent_graph.astream(
             {"messages": [{"role": "user", "content": user_input}]},
             stream_mode="messages",
         ):
@@ -114,9 +105,7 @@ async def chat_stream(req: ChatRequest):
     )
 
 
-if __name__ == "__main__":
-    import uvicorn
-
-    # To enable HTTP/2, install uvicorn with h2 extras and run with http="h2"
-    # Example: uvicorn server:app --host 127.0.0.1 --port 8080 --http h2
-    uvicorn.run("server:app", host="127.0.0.1", port=8080, reload=False)
+@app.get("/chat/history")
+async def chat_history(db: AsyncSession = Depends(get_session)):
+    threads = await db.query(ChatThread).all()
+    return {"history": [thread.to_dict() for thread in threads]}
