@@ -92,8 +92,8 @@ async def create_thread(session: AsyncSession | None = None):
     If a session is provided, the caller is responsible for committing.
     Otherwise, a transactional session is created and committed.
     """
-    now = datetime.now(timezone.utc).isoformat()
-    thread = ChatThread(created_at=now, updated_at=now)
+    # Let DB/ORM defaults set timestamps
+    thread = ChatThread()
 
     if session is not None:
         session.add(thread)

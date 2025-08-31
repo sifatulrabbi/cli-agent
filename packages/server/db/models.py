@@ -1,8 +1,9 @@
 import uuid
 from db import Base
-from sqlalchemy import String, JSON, Text, Enum, ForeignKey
+from sqlalchemy import String, JSON, Text, Enum, ForeignKey, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
+from datetime import datetime
 
 
 class ChatThread(Base):
@@ -11,9 +12,22 @@ class ChatThread(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    created_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    updated_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    deleted_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=func.now(),
+        onupdate=func.now(),
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     model_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     usage: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
@@ -37,6 +51,22 @@ class ChatMessage(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tool_calls: Mapped[Optional[list[dict]]] = mapped_column(JSON, nullable=True)
     type: Mapped[str] = mapped_column(MessageType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=func.now(),
+        onupdate=func.now(),
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     thread: Mapped[ChatThread] = relationship(back_populates="messages")
 
