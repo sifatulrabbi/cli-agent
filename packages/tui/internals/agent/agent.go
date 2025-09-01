@@ -1,63 +1,71 @@
 package agent
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
+	"context"
 	"log"
-	"net/http"
+	"os"
+
+	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/shared"
 )
 
-func ChatWithLLM(question string) chan string {
-	log.Println("Invoking LLM...")
+var (
+	OPENAI_API_KEY string
+	OpenAIClient   openai.Client
+)
 
-	ch := make(chan string, 256)
+func init() {
+	OPENAI_API_KEY = os.Getenv("OPENAI_API_KEY")
+	if OPENAI_API_KEY == "" {
+		log.Fatalln("OPENAI_API_KEY is not found but is required!")
+	}
+
+	OpenAIClient = openai.NewClient(
+		option.WithAPIKey(os.Getenv("OPENAI_API_KEY")),
+	)
+}
+
+func ChatWithLLM(question string) chan string {
+	ch := make(chan string)
 
 	go func() {
 		defer close(ch)
 
-		payload := struct {
-			Input string `json:"input"`
-		}{Input: question}
-		body, err := json.Marshal(payload)
-		if err != nil {
-			log.Printf("marshal error: %v", err)
-			return
+		params := openai.ChatCompletionNewParams{
+			Messages:        []openai.ChatCompletionMessageParamUnion{openai.UserMessage(question)},
+			Model:           openai.ChatModelGPT5Nano,
+			ReasoningEffort: shared.ReasoningEffortLow,
 		}
+		stream := OpenAIClient.Chat.Completions.NewStreaming(context.TODO(), params)
 
-		req, err := http.NewRequest("POST", "http://localhost:8080/chat/stream", bytes.NewReader(body))
-		if err != nil {
-			log.Printf("request build error: %v", err)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "text/plain")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Printf("request error: %v", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			b, _ := io.ReadAll(resp.Body)
-			log.Printf("bad status: %s body: %s", resp.Status, string(b))
-			return
-		}
-
-		for {
-			buf := make([]byte, 2048)
-			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				ch <- string(buf)
+		defer func() {
+			if err := stream.Close(); err != nil {
+				log.Println("Error during stream.Close():", err)
 			}
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("stream read error: %v", err)
-				}
-				break
+		}()
+
+		acc := openai.ChatCompletionAccumulator{}
+
+		for stream.Next() {
+			chunk := stream.Current()
+			acc.AddChunk(chunk)
+
+			for _, c := range chunk.Choices {
+				ch <- c.Delta.Content
+			}
+
+			if _, ok := acc.JustFinishedContent(); ok {
+			}
+			if tool, ok := acc.JustFinishedToolCall(); ok {
+				log.Println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
+			}
+			if refusal, ok := acc.JustFinishedRefusal(); ok {
+				log.Println("Refusal stream finished:", refusal)
+			}
+
+			if stream.Err() != nil {
+				log.Fatalln("Error in the stream:", stream.Err())
 			}
 		}
 	}()
