@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/openai/openai-go/v2"
 
 	"github.com/sifatulrabbi/tea-play/internals/agent"
 )
@@ -28,8 +29,8 @@ const (
 )
 
 var (
-	// positive = lipgloss.AdaptiveColor{Light: "#059669", Dark: "#34D399"}
-	// labelSt    = lipgloss.NewStyle().Foreground(positive)
+	positive   = lipgloss.AdaptiveColor{Light: "#059669", Dark: "#34D399"}
+	labelSt    = lipgloss.NewStyle().Foreground(positive)
 	accent     = lipgloss.AdaptiveColor{Light: "#2D5BFF", Dark: "#7AA2F7"}
 	subtle     = lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
 	titleSt    = lipgloss.NewStyle().Bold(true).Foreground(accent).Bold(true)
@@ -87,7 +88,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 7
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
 		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 80)
 
 		m.input.Width = max(m.width-(ROOT_PADDING_X*2)-2, 1)
@@ -118,6 +119,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "/exit":
 				return m, tea.Quit
 			case "/clear":
+				m.buf.Reset()
+				// Clear the in-memory conversation history as well
+				agent.History = agent.History[:0]
 				m.vp.SetContent("")
 				return m, nil
 			case "/models":
@@ -125,15 +129,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			ch := agent.ChatWithLLM(val)
-			m.ch = ch
-			m.busy = true
-			m.busyStatus = "Processing…"
-			if _, err := m.buf.WriteString(fmt.Sprintf("USER: %s\nAI: ", val)); err != nil {
-				log.Panicln("Unable to write to the string buffer:", err)
-			}
-			m.vp.SetContent(m.buf.String())
-			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
+			// Append the user message to history immediately so it renders right away
+			agent.History = append(agent.History, openai.UserMessage(val))
+
+            ch := agent.ChatWithLLM(val)
+            m.ch = ch
+            m.busy = true
+            m.busyStatus = "Processing…"
+            // Render the entire history; agent will send update signals as it streams
+            m.vp.SetContent(renderHistory())
+            return m, tea.Batch(m.spin.Tick, m.waitForChunk())
 		}
 
 	case spinner.TickMsg:
@@ -156,9 +161,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamChunkMsg:
 		m.busyStatus = "Generating…"
-		m.buf.WriteString(string(msg))
 		isAtBottom := m.vp.AtBottom()
-		m.vp.SetContent(m.buf.String())
+		// Re-render the full history (agent updates History incrementally)
+		m.vp.SetContent(renderHistory())
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
@@ -166,11 +171,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamDoneMsg:
 		isAtBottom := m.vp.AtBottom()
-		m.vp.SetContent(m.buf.String())
+		// After stream completes, History already holds the final assistant message
+		m.vp.SetContent(renderHistory())
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
-		m.buf.Reset()
 		m.busy = false
 		m.busyStatus = ""
 		return m, func() tea.Msg { return InfoMsg("Successfully generated reply from the LLM!") }
@@ -213,6 +218,60 @@ func (m model) waitForChunk() tea.Cmd {
 		}
 		return streamDoneMsg{}
 	}
+}
+
+// renderHistory builds the viewport content from the agent's full History.
+func renderHistory() string {
+	var b strings.Builder
+	for _, msg := range agent.History {
+		switch {
+		case msg.OfUser != nil:
+			// Label
+			b.WriteString(labelSt.Render("» USER"))
+			b.WriteString("\n")
+			// Content can be plain string or an array of content parts
+			if msg.OfUser.Content.OfString.Valid() {
+				b.WriteString(msg.OfUser.Content.OfString.Value)
+			} else if len(msg.OfUser.Content.OfArrayOfContentParts) > 0 {
+				for _, part := range msg.OfUser.Content.OfArrayOfContentParts {
+					if txt := part.GetText(); txt != nil {
+						b.WriteString(*txt)
+					}
+				}
+			}
+			b.WriteString("\n\n")
+
+		case msg.OfAssistant != nil:
+			b.WriteString(labelSt.Render("» AI"))
+			b.WriteString("\n")
+			if msg.OfAssistant.Content.OfString.Valid() {
+				b.WriteString(msg.OfAssistant.Content.OfString.Value)
+			} else if len(msg.OfAssistant.Content.OfArrayOfContentParts) > 0 {
+				for _, part := range msg.OfAssistant.Content.OfArrayOfContentParts {
+					if txt := part.GetText(); txt != nil {
+						b.WriteString(*txt)
+					}
+				}
+			} else if msg.GetRefusal() != nil {
+				b.WriteString(*msg.GetRefusal())
+			}
+			b.WriteString("\n\n")
+
+		case msg.OfTool != nil:
+			b.WriteString(labelSt.Render("» TOOL"))
+			b.WriteString("\n")
+			if msg.OfTool.Content.OfString.Valid() {
+				b.WriteString(msg.OfTool.Content.OfString.Value)
+			} else if len(msg.OfTool.Content.OfArrayOfContentParts) > 0 {
+				for _, part := range msg.OfTool.Content.OfArrayOfContentParts {
+					// Tool content parts are text-only in this union
+					b.WriteString(part.Text)
+				}
+			}
+			b.WriteString("\n\n")
+		}
+	}
+	return b.String()
 }
 
 func StartProgram() {
