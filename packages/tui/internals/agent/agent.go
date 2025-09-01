@@ -27,7 +27,7 @@ func init() {
 }
 
 func ChatWithLLM(question string) chan string {
-	ch := make(chan string)
+	ch := make(chan string, 1024)
 
 	go func() {
 		defer close(ch)
@@ -55,7 +55,8 @@ func ChatWithLLM(question string) chan string {
 				ch <- c.Delta.Content
 			}
 
-			if _, ok := acc.JustFinishedContent(); ok {
+			if content, ok := acc.JustFinishedContent(); ok {
+				log.Println("Content generation finished:", content)
 			}
 			if tool, ok := acc.JustFinishedToolCall(); ok {
 				log.Println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)

@@ -49,10 +49,10 @@ type model struct {
 	busyStatus string
 	status     string
 
-	buf      strings.Builder
-	input    textinput.Model
-	spin     spinner.Model
-	viewport viewport.Model
+	buf   strings.Builder
+	input textinput.Model
+	spin  spinner.Model
+	vp    viewport.Model
 }
 
 func New() model {
@@ -74,7 +74,7 @@ func New() model {
 		buf:        strings.Builder{},
 		input:      ti,
 		spin:       sp,
-		viewport:   vp,
+		vp:         vp,
 	}
 }
 
@@ -87,8 +87,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.viewport.Height = m.height - ROOT_PADDING_Y*2 - 7
-		m.viewport.Width = min(m.width-ROOT_PADDING_X*2, 80)
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 7
+		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 80)
 
 		m.input.Width = max(m.width-(ROOT_PADDING_X*2)-2, 1)
 		return m, nil
@@ -118,7 +118,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "/exit":
 				return m, tea.Quit
 			case "/clear":
-				m.viewport.SetContent("")
+				m.vp.SetContent("")
 				return m, nil
 			case "/models":
 				// TODO:
@@ -132,7 +132,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, err := m.buf.WriteString(fmt.Sprintf("USER: %s\nAI: ", val)); err != nil {
 				log.Panicln("Unable to write to the string buffer:", err)
 			}
-			m.viewport.SetContent(m.buf.String())
+			m.vp.SetContent(m.buf.String())
 			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
 		}
 
@@ -157,18 +157,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamChunkMsg:
 		m.busyStatus = "Generating…"
 		m.buf.WriteString(string(msg))
-		isAtBottom := m.viewport.AtBottom()
-		m.viewport.SetContent(m.buf.String())
+		isAtBottom := m.vp.AtBottom()
+		m.vp.SetContent(m.buf.String())
 		if isAtBottom {
-			m.viewport.GotoBottom()
+			m.vp.GotoBottom()
 		}
 		return m, m.waitForChunk()
 
 	case streamDoneMsg:
-		isAtBottom := m.viewport.AtBottom()
-		m.viewport.SetContent(m.buf.String())
+		isAtBottom := m.vp.AtBottom()
+		m.vp.SetContent(m.buf.String())
 		if isAtBottom {
-			m.viewport.GotoBottom()
+			m.vp.GotoBottom()
 		}
 		m.buf.Reset()
 		m.busy = false
@@ -178,7 +178,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var inputCmd, viewportCmd tea.Cmd
 	m.input, inputCmd = m.input.Update(msg)
-	m.viewport, viewportCmd = m.viewport.Update(msg)
+	m.vp, viewportCmd = m.vp.Update(msg)
 	return m, tea.Batch(inputCmd, viewportCmd)
 }
 
@@ -197,7 +197,7 @@ func (m model) View() string {
 		Height(max(m.height, 1)).
 		Render(fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s\n",
 			header,
-			m.viewport.View(),
+			m.vp.View(),
 			busyLine,
 			m.status,
 			inputField,
