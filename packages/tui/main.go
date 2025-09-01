@@ -7,11 +7,17 @@ import (
 	"log"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/joho/godotenv"
 
 	"github.com/sifatulrabbi/tea-play/cmd"
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	f, err := tea.LogToFile("./tmp/logs/debug.log", "")
 	if err != nil {
 		log.Panicln("Failed to open log file:", err)

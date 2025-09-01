@@ -51,6 +51,7 @@ class ChatMessage(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tool_calls: Mapped[Optional[list[dict]]] = mapped_column(JSON, nullable=True)
     type: Mapped[str] = mapped_column(MessageType, nullable=False)
+    thinking_logs: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

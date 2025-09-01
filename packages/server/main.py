@@ -1,6 +1,5 @@
 import os
 import sys
-import asyncio
 import uvicorn
 from dotenv import load_dotenv
 
@@ -13,10 +12,13 @@ load_dotenv()
 
 try:
     import agent
-    import db
 except Exception as exc:
     raise RuntimeError("Failed to import agent.py for graph streaming") from exc
 
 if __name__ == "__main__":
-    asyncio.run(db.init_db(create_all=True))
-    uvicorn.run("server:app", host="127.0.0.1", port=8080, reload=False)
+    uvicorn.run(
+        "server:app",
+        host="127.0.0.1",
+        port=8080,
+        reload=os.getenv("ENV", "local") == "local",
+    )

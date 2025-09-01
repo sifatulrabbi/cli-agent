@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,7 +107,13 @@ async def create_thread(session: AsyncSession | None = None):
         return thread
 
 
-async def add_message_to_thread(thread_id: str, session: AsyncSession | None = None):
+async def add_message_to_thread(
+    thread_id: str,
+    msg_type: str,
+    content: str,
+    tool_calls: list[Any],
+    session: AsyncSession | None = None,
+):
     """Create and return a new ChatMessage under the given thread.
 
     Creates a minimal default message with type="human". If a session is
@@ -118,9 +124,15 @@ async def add_message_to_thread(thread_id: str, session: AsyncSession | None = N
         # Validate the thread exists to avoid integrity errors
         thread = await get_chat_thread_by_id(thread_id, session=session)
         if thread is None:
-            return None
+            not_found_exp = Exception()
+            raise Exception()
 
-        message = ChatMessage(thread_id=thread_id, type="human")
+        message = ChatMessage(
+            thread_id=thread_id,
+            type=msg_type,
+            tool_calls=tool_calls,
+            content=content,
+        )
         session.add(message)
         await session.flush()
         return message
