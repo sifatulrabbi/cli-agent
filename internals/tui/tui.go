@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sifatulrabbi/tea-play/internals/agent"
+	"github.com/sifatulrabbi/tea-play/internals/utils"
 )
 
 type (
@@ -60,7 +61,7 @@ type model struct {
 func New() model {
 	ti := textinput.New()
 	ti.Prompt = "❯ "
-	ti.Placeholder = "Type a label and press enter"
+	ti.Placeholder = getInputPlaceholder()
 	ti.Focus() // focusing by default.
 
 	vp := viewport.New(1, 1)
@@ -87,6 +88,8 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.input.Placeholder = getInputPlaceholder()
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -234,6 +237,10 @@ func clearMsgTick() tea.Cmd {
 	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
 		return ClearStatusMsg{}
 	})
+}
+
+func getInputPlaceholder() string {
+	return utils.Ternary(len(agent.History) == 0, "Enter your message", "Write a follow up")
 }
 
 func StartProgram() {

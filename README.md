@@ -4,13 +4,17 @@ An interactive CLI AI agent built with LangChain, LangGraph, and Ink. It streams
 
 ### Roadmap / TODOs
 
-- [ ] Proper text input
-- [ ] Render without jankyness
+- [x] Render without jankyness
+- [x] Text input
+- [ ] Text input with multi line support
 - [ ] Todo tool for step by step agent mode
 - [ ] Auto compact the context when reaching context limit
 - [ ] Web search tool
 - [ ] Grep tool
-- [ ] Select files of the working dir
+- [ ] Create new files and folders tool
+- [ ] Remove files and folders tool
+- [ ] Append or patch files tool
+- [ ] Select files of the working dir using '@'
 - [ ] LSP integration for linting
 
 ### License
