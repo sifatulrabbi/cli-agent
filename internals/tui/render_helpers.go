@@ -11,21 +11,23 @@ func renderHistory(width int) string {
 	var b strings.Builder
 	for _, msg := range agent.History {
 		switch {
+
 		case msg.OfUser != nil:
-			// Label
-			b.WriteString(labelSt.Render("» USER"))
 			b.WriteString("\n")
-			// Content can be plain string or an array of content parts
+			contentBuf := strings.Builder{}
+			userInputArea := inputBoxSt.Width(width - 2)
+			maxW := userInputArea.GetWidth() - 2 // because of the inner padding of the user message viewer
 			if msg.OfUser.Content.OfString.Valid() {
-				b.WriteString(wrapToWidth(msg.OfUser.Content.OfString.Value, width))
+				contentBuf.WriteString(wrapToWidth(msg.OfUser.Content.OfString.Value, maxW))
 			} else if len(msg.OfUser.Content.OfArrayOfContentParts) > 0 {
 				for _, part := range msg.OfUser.Content.OfArrayOfContentParts {
 					if txt := part.GetText(); txt != nil {
-						b.WriteString(wrapToWidth(*txt, width))
+						contentBuf.WriteString(wrapToWidth(*txt, maxW))
 					}
 				}
 			}
-			b.WriteString("\n\n")
+			b.WriteString(userInputArea.Padding(0, 1).Render(contentBuf.String()))
+			b.WriteString("\n")
 
 		case msg.OfAssistant != nil:
 			b.WriteString(labelSt.Render("» AI"))
@@ -41,7 +43,7 @@ func renderHistory(width int) string {
 			} else if msg.GetRefusal() != nil {
 				b.WriteString(wrapToWidth(*msg.GetRefusal(), width))
 			}
-			b.WriteString("\n\n")
+			b.WriteString("\n")
 
 		case msg.OfTool != nil:
 			b.WriteString(labelSt.Render("» TOOL"))
@@ -54,7 +56,7 @@ func renderHistory(width int) string {
 					b.WriteString(wrapToWidth(part.Text, width))
 				}
 			}
-			b.WriteString("\n\n")
+			b.WriteString("\n")
 		}
 	}
 	return b.String()
@@ -81,6 +83,9 @@ func wrapToWidth(s string, width int) string {
 				buf = ""
 			}
 			buf += word + " "
+		}
+		if len(buf) > 0 {
+			newLines = append(newLines, buf)
 		}
 	}
 

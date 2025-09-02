@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -20,6 +21,7 @@ type (
 	InfoMsg        string
 	streamChunkMsg string
 	streamDoneMsg  struct{}
+	ClearStatusMsg struct{}
 )
 
 const (
@@ -90,9 +92,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 
 		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
-		m.vp.Width = max((m.width-ROOT_PADDING_X*2)-2, 1)
+		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 1)
 
-		m.input.Width = max(m.width-(ROOT_PADDING_X*2)-2, 1)
+		m.input.Width = max(m.width-ROOT_PADDING_X*4, 1)
+
+		log.Printf("Max width: %d, input width: %d, viewport width: %d\n", m.width, m.input.Width, m.vp.Width)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -116,6 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.input.Reset()
+
 			switch val {
 			case "/exit":
 				return m, tea.Quit
@@ -132,10 +137,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			ch := agent.ChatWithLLM(val)
 			m.ch = ch
+
 			m.busy = true
 			m.busyStatus = "Processing…"
+
 			m.vp.SetContent(renderHistory(m.vp.Width))
 			m.vp.GotoBottom()
+
 			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
 		}
 
@@ -150,11 +158,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InfoMsg:
 		m.busy = false
 		m.status = successSt.Render(string(msg))
-		return m, nil
+		return m, clearMsgTick()
 
 	case ErrMsg:
 		m.busy = false
 		m.status = errorSt.Render(string(msg))
+		return m, clearMsgTick()
+
+	case ClearStatusMsg:
+		m.status = ""
 		return m, nil
 
 	case streamChunkMsg:
@@ -218,8 +230,13 @@ func (m model) waitForChunk() tea.Cmd {
 	}
 }
 
+func clearMsgTick() tea.Cmd {
+	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+		return ClearStatusMsg{}
+	})
+}
+
 func StartProgram() {
-	// Enable mouse events so the viewport can handle wheel scrolling.
 	p := tea.NewProgram(New(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		log.Println("Error:", err)
