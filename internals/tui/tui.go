@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/openai/openai-go/v2"
 
 	"github.com/sifatulrabbi/tea-play/internals/agent"
 )
@@ -89,7 +88,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 
 		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
-		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 80)
+		m.vp.Width = max((m.width-ROOT_PADDING_X*2)-2, 1)
 
 		m.input.Width = max(m.width-(ROOT_PADDING_X*2)-2, 1)
 		return m, nil
@@ -129,16 +128,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// Append the user message to history immediately so it renders right away
-			agent.History = append(agent.History, openai.UserMessage(val))
-
-            ch := agent.ChatWithLLM(val)
-            m.ch = ch
-            m.busy = true
-            m.busyStatus = "Processing…"
-            // Render the entire history; agent will send update signals as it streams
-            m.vp.SetContent(renderHistory())
-            return m, tea.Batch(m.spin.Tick, m.waitForChunk())
+			ch := agent.ChatWithLLM(val)
+			m.ch = ch
+			m.busy = true
+			m.busyStatus = "Processing…"
+			// Render the entire history; agent will send update signals as it streams
+			m.vp.SetContent(renderHistory(m.vp.Width))
+			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
 		}
 
 	case spinner.TickMsg:
@@ -163,7 +159,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busyStatus = "Generating…"
 		isAtBottom := m.vp.AtBottom()
 		// Re-render the full history (agent updates History incrementally)
-		m.vp.SetContent(renderHistory())
+		m.vp.SetContent(renderHistory(m.vp.Width))
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
@@ -172,7 +168,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamDoneMsg:
 		isAtBottom := m.vp.AtBottom()
 		// After stream completes, History already holds the final assistant message
-		m.vp.SetContent(renderHistory())
+		m.vp.SetContent(renderHistory(m.vp.Width))
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
@@ -221,7 +217,7 @@ func (m model) waitForChunk() tea.Cmd {
 }
 
 // renderHistory builds the viewport content from the agent's full History.
-func renderHistory() string {
+func renderHistory(width int) string {
 	var b strings.Builder
 	for _, msg := range agent.History {
 		switch {
@@ -231,11 +227,11 @@ func renderHistory() string {
 			b.WriteString("\n")
 			// Content can be plain string or an array of content parts
 			if msg.OfUser.Content.OfString.Valid() {
-				b.WriteString(msg.OfUser.Content.OfString.Value)
+				b.WriteString(wrapToWidth(msg.OfUser.Content.OfString.Value, width))
 			} else if len(msg.OfUser.Content.OfArrayOfContentParts) > 0 {
 				for _, part := range msg.OfUser.Content.OfArrayOfContentParts {
 					if txt := part.GetText(); txt != nil {
-						b.WriteString(*txt)
+						b.WriteString(wrapToWidth(*txt, width))
 					}
 				}
 			}
@@ -245,15 +241,15 @@ func renderHistory() string {
 			b.WriteString(labelSt.Render("» AI"))
 			b.WriteString("\n")
 			if msg.OfAssistant.Content.OfString.Valid() {
-				b.WriteString(msg.OfAssistant.Content.OfString.Value)
+				b.WriteString(wrapToWidth(msg.OfAssistant.Content.OfString.Value, width))
 			} else if len(msg.OfAssistant.Content.OfArrayOfContentParts) > 0 {
 				for _, part := range msg.OfAssistant.Content.OfArrayOfContentParts {
 					if txt := part.GetText(); txt != nil {
-						b.WriteString(*txt)
+						b.WriteString(wrapToWidth(*txt, width))
 					}
 				}
 			} else if msg.GetRefusal() != nil {
-				b.WriteString(*msg.GetRefusal())
+				b.WriteString(wrapToWidth(*msg.GetRefusal(), width))
 			}
 			b.WriteString("\n\n")
 
@@ -261,17 +257,44 @@ func renderHistory() string {
 			b.WriteString(labelSt.Render("» TOOL"))
 			b.WriteString("\n")
 			if msg.OfTool.Content.OfString.Valid() {
-				b.WriteString(msg.OfTool.Content.OfString.Value)
+				b.WriteString(wrapToWidth(msg.OfTool.Content.OfString.Value, width))
 			} else if len(msg.OfTool.Content.OfArrayOfContentParts) > 0 {
 				for _, part := range msg.OfTool.Content.OfArrayOfContentParts {
 					// Tool content parts are text-only in this union
-					b.WriteString(part.Text)
+					b.WriteString(wrapToWidth(part.Text, width))
 				}
 			}
 			b.WriteString("\n\n")
 		}
 	}
 	return b.String()
+}
+
+// wraps longer lines to fit into the viewport, this is a dirty line wrapper that works okay for English but will not work well for code
+func wrapToWidth(s string, width int) string {
+	if width < 30 {
+		return "Please open the cli-agent in a large terminal with width of more than 30 columns."
+	}
+
+	var newLines []string = nil
+
+	for line := range strings.SplitSeq(s, "\n") {
+		if len(line) <= width {
+			newLines = append(newLines, line)
+			continue
+		}
+
+		buf := ""
+		for word := range strings.SplitSeq(line, " ") {
+			if len(buf+word+" ") > width {
+				newLines = append(newLines, buf)
+				buf = ""
+			}
+			buf += word + " "
+		}
+	}
+
+	return strings.Join(newLines, "\n")
 }
 
 func StartProgram() {
