@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sifatulrabbi/tea-play/internals/agent"
+	"github.com/sifatulrabbi/cli-agent/internals/agent"
 )
 
 const DefaultTruncateLength = 200

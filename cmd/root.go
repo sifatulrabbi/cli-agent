@@ -8,12 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sifatulrabbi/tea-play/internals/tui"
+	"github.com/sifatulrabbi/cli-agent/internals/tui"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "tea-play",
+	Use:   "cli-agent",
 	Short: "CLI Agent",
 	Long:  `CLI Agent long...long...`,
 	// Uncomment the following line if your bare application
@@ -37,7 +37,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.tea-play.yaml)")
+	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cli-agent.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

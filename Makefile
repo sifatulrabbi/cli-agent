@@ -1,4 +1,8 @@
 .PHONY: dev
 
+local-build:
+	go build && go install
+
 dev:
-	go build && go install && tea-play
+	go build && go install && cli-agent
+

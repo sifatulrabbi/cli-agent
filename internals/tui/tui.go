@@ -13,8 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/sifatulrabbi/tea-play/internals/agent"
-	"github.com/sifatulrabbi/tea-play/internals/utils"
+	"github.com/sifatulrabbi/cli-agent/internals/agent"
+	"github.com/sifatulrabbi/cli-agent/internals/utils"
 )
 
 type (

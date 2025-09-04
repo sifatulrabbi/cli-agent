@@ -1,4 +1,4 @@
-module github.com/sifatulrabbi/tea-play
+module github.com/sifatulrabbi/cli-agent
 
 go 1.25.0
 
