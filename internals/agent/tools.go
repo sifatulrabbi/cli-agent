@@ -14,6 +14,19 @@ import (
 	"github.com/openai/openai-go/v2/shared"
 )
 
+// Tool name constants to avoid manual strings
+const (
+	ToolListProjectFilesAndDirs ToolName = "ls"
+	ToolReadFiles               ToolName = "read_files"
+	ToolCreateEntity            ToolName = "create_entity"
+	ToolRemoveEntity            ToolName = "remove_entity"
+	ToolInsertIntoTextFile      ToolName = "append_file"
+	ToolPatchTextFile           ToolName = "patch_file"
+)
+
+// ToolName is a typed alias for tool identifiers
+type ToolName string
+
 // Active project configuration (relative to repo root)
 // By default we operate inside testBench/workspace, mirroring the TS tools.
 const (
@@ -39,16 +52,16 @@ var ignorePaths = []string{
 // Tools is the list of OpenAI function tools exposed to the model.
 var Tools = []openai.ChatCompletionToolUnionParam{
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "list_project_files_and_dirs_tool",
-		Description: openai.String("List all files of the project."),
+		Name:        string(ToolListProjectFilesAndDirs),
+		Description: openai.String("List all files, directories, and sub directories of the current project."),
 		Parameters: shared.FunctionParameters{
 			"type":       "object",
 			"properties": map[string]any{},
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "read_files_tool",
-		Description: openai.String("Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)"),
+		Name:        string(ToolReadFiles),
+		Description: openai.String("Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
@@ -64,7 +77,7 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "create_entity_tool",
+		Name:        string(ToolCreateEntity),
 		Description: openai.String("Create an entity either a directory or a file in the project."),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
@@ -91,8 +104,8 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "remove_entity_tool",
-		Description: openai.String("Remove an entity either a directory or a file from the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)"),
+		Name:        string(ToolRemoveEntity),
+		Description: openai.String("Remove an entity either a directory or a file from the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
@@ -105,8 +118,8 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "insert_into_text_file_tool",
-		Description: openai.String("Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the list_project_files_and_dirs_tool tool.)"),
+		Name:        string(ToolInsertIntoTextFile),
+		Description: openai.String("Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
@@ -136,8 +149,8 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        "patch_text_file_tool",
-		Description: openai.String("Patch a text file by replacing existing line ranges only. Insertion is not supported here; use insert_into_text_file_tool for insertions. Must provide the full path (obtainable via list_project_files_and_dirs_tool)."),
+		Name:        string(ToolPatchTextFile),
+		Description: openai.String("Patch a text file by replacing existing line ranges only. Insertion is not supported here; use 'append_file' for insertions. Must provide the full path (obtainable via 'ls' tool)."),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
@@ -174,12 +187,12 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 
 // ToolHandlers maps tool name to an executor that returns a string result.
 var ToolHandlers = map[string]func(argsJSON string) (string, error){
-	"list_project_files_and_dirs_tool": handleListProjectFiles,
-	"read_files_tool":                  handleReadFiles,
-	"create_entity_tool":               handleCreateEntity,
-	"remove_entity_tool":               handleRemoveEntity,
-	"insert_into_text_file_tool":       handleInsertIntoTextFile,
-	"patch_text_file_tool":             handlePatchTextFile,
+	string(ToolListProjectFilesAndDirs): handleListProjectFiles,
+	string(ToolReadFiles):               handleReadFiles,
+	string(ToolCreateEntity):            handleCreateEntity,
+	string(ToolRemoveEntity):            handleRemoveEntity,
+	string(ToolInsertIntoTextFile):      handleInsertIntoTextFile,
+	string(ToolPatchTextFile):           handlePatchTextFile,
 }
 
 // ----------------------
