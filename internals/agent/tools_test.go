@@ -20,24 +20,26 @@ func TestListProjectFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ls tool error: %v", err)
 	}
+	fmt.Println(out)
 	assertContains(t, out, "<project-entries>")
-	assertContains(t, out, projectRootName+"/README.md")
-	assertContains(t, out, projectRootName+"/dir1/")
-	assertContains(t, out, projectRootName+"/dir1/file.txt")
+	assertContains(t, out, "./README.md")
+	assertContains(t, out, "./dir1/")
+	assertContains(t, out, "./dir1/file.txt")
 }
 
 func TestReadFiles(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "README.md"), "hello\nworld")
+	mustMkdirAll(t, projectRootDir+"/newdir")
+	mustWriteFile(t, filepath.Join(projectRootDir, "./newdir", "./README.md"), "hello\nworld")
 
-	rfArgs := fmt.Sprintf(`{"filePaths":[%q]}`, projectRootName+"/README.md")
+	rfArgs := fmt.Sprintf(`{"filePaths":[%q]}`, "./newdir/README.md")
 	out, err := handleReadFiles(rfArgs)
 	if err != nil {
 		t.Fatalf("read_files error: %v", err)
 	}
-	assertContains(t, out, "File: "+projectRootName+"/README.md")
+	assertContains(t, out, "File: ./newdir/README.md")
 	assertContains(t, out, "1 | hello")
 	assertContains(t, out, "2 | world")
 }
@@ -47,8 +49,8 @@ func TestCreateEntity_Dir(t *testing.T) {
 	defer cleanup()
 
 	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"dir","entityName":%q,"content":""}`,
-		projectRootName+"/newdir",
-		projectRootName+"/newdir")
+		"./newdir",
+		"./newdir")
 	out, err := handleCreateEntity(args)
 	if err != nil {
 		t.Fatalf("create_entity dir error: %v", err)
@@ -62,8 +64,8 @@ func TestCreateEntity_File(t *testing.T) {
 	defer cleanup()
 
 	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"file","entityName":%q,"content":"first\nsecond"}`,
-		projectRootName+"/newdir/note.txt",
-		projectRootName+"/newdir/note.txt")
+		"./newdir/note.txt",
+		"./newdir/note.txt")
 	_, err := handleCreateEntity(args)
 	if err != nil {
 		t.Fatalf("create_entity file error: %v", err)
@@ -77,12 +79,12 @@ func TestInsertIntoTextFile(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\nsecond")
 
-	args := fmt.Sprintf(`{"filePath":%q,"inserts":[{"insertAfter":1,"content":"inserted"}]}`, projectRootName+"/newdir/note.txt")
+	args := fmt.Sprintf(`{"filePath":%q,"inserts":[{"insertAfter":1,"content":"inserted"}]}`, "./newdir/note.txt")
 	out, err := handleInsertIntoTextFile(args)
 	if err != nil {
 		t.Fatalf("insert_into_text_file error: %v", err)
 	}
-	assertContains(t, out, "File: "+projectRootName+"/newdir/note.txt")
+	assertContains(t, out, "File: ./newdir/note.txt")
 	assertContains(t, out, "1 | first")
 	assertContains(t, out, "2 | inserted")
 	assertContains(t, out, "3 | second")
@@ -94,14 +96,33 @@ func TestPatchTextFile(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\ninserted\nsecond")
 
-	args := fmt.Sprintf(`{"filePath":%q,"patches":[{"startLine":2,"endLine":2,"content":"REPLACED"}]}`, projectRootName+"/newdir/note.txt")
+	args := fmt.Sprintf(`{"filePath":%q,"patches":[{"startLine":2,"endLine":2,"content":"REPLACED"}]}`, "./newdir/note.txt")
 	out, err := handlePatchTextFile(args)
 	if err != nil {
 		t.Fatalf("patch_text_file error: %v", err)
 	}
-	assertContains(t, out, "File: "+projectRootName+"/newdir/note.txt")
+	assertContains(t, out, "File: ./newdir/note.txt")
 	assertContains(t, out, "1 | first")
 	assertContains(t, out, "2 | REPLACED")
+}
+
+func TestGrep(t *testing.T) {
+	cleanup := setupTempProject(t)
+	defer cleanup()
+
+	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\ninserted\nsecond")
+
+	// Basic grep for a known word
+	args := fmt.Sprintf(`{"cmd":%q}`, "grep -R -n inserted .")
+	out, err := handleGrep(args)
+	if err != nil {
+		t.Fatalf("grep error: %v", err)
+	}
+	fmt.Println(out)
+	// Expect output to include file path and line number
+	if !strings.Contains(out, "inserted") {
+		t.Fatalf("expected grep output to contain 'inserted', got: %s", out)
+	}
 }
 
 func TestRemoveEntity_File(t *testing.T) {
@@ -110,7 +131,7 @@ func TestRemoveEntity_File(t *testing.T) {
 
 	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "content")
 
-	args := fmt.Sprintf(`{"entityPath":%q}`, projectRootName+"/newdir/note.txt")
+	args := fmt.Sprintf(`{"entityPath":%q}`, "./newdir/note.txt")
 	_, err := handleRemoveEntity(args)
 	if err != nil {
 		t.Fatalf("remove_entity file error: %v", err)
@@ -126,7 +147,7 @@ func TestRemoveEntity_Dir(t *testing.T) {
 
 	mustMkdirAll(t, filepath.Join(projectRootDir, "newdir"))
 
-	args := fmt.Sprintf(`{"entityPath":%q}`, projectRootName+"/newdir")
+	args := fmt.Sprintf(`{"entityPath":%q}`, "./newdir")
 	_, err := handleRemoveEntity(args)
 	if err != nil {
 		t.Fatalf("remove_entity dir error: %v", err)

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,6 +25,7 @@ const (
 	ToolRemoveEntity ToolName = "remove_entity"
 	ToolAppendFile   ToolName = "append_file"
 	ToolPatchFile    ToolName = "patch_file"
+	ToolGrep         ToolName = "grep"
 )
 
 var (
@@ -39,12 +42,11 @@ func init() {
 	projectRootName = filepath.Base(projectRootDir)
 }
 
-var ignorePaths = []string{
+var ignoreDirs = []string{
 	".venv",
 	"env",
 	".env",
 	".git",
-	".DS_Store",
 	".vscode",
 	".idea",
 	"node_modules",
@@ -54,6 +56,19 @@ var ignorePaths = []string{
 	".cache",
 	".tmp",
 	"tmp",
+}
+
+var ignoreFiles = []string{
+	".DS_Store",
+	".env",
+	"*.env.*",
+	"*.log",
+	"*.db",
+	"*.sqlite",
+	"*.egg",
+	"*.egg-info",
+	"*.pyc",
+	"*.ignore.*",
 }
 
 // Tools is the list of OpenAI function tools exposed to the model.
@@ -190,6 +205,20 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 			"required": []string{"filePath", "patches"},
 		},
 	}),
+	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
+		Name:        string(ToolGrep),
+		Description: openai.String("Perform a grep action using the unix grep tool."),
+		Parameters: shared.FunctionParameters{
+			"type": "object",
+			"properties": map[string]any{
+				"cmd": map[string]any{
+					"type":        "string",
+					"description": "The command to run (e.g., grep -R -n 'pattern' .). No need to provide any exclude patterns.",
+				},
+			},
+			"required": []string{"cmd"},
+		},
+	}),
 }
 
 // ToolHandlers maps tool name to an executor that returns a string result.
@@ -200,6 +229,7 @@ var ToolHandlers = map[string]func(argsJSON string) (string, error){
 	string(ToolRemoveEntity): handleRemoveEntity,
 	string(ToolAppendFile):   handleInsertIntoTextFile,
 	string(ToolPatchFile):    handlePatchTextFile,
+	string(ToolGrep):         handleGrep,
 }
 
 // ----------------------
@@ -223,10 +253,15 @@ func buildPathFromRootDir(entryPath string) string {
 }
 
 func dirIgnored(path string) bool {
-	for _, ig := range ignorePaths {
+	for _, ig := range ignoreDirs {
 		if strings.Contains(path, string(os.PathSeparator)+ig+string(os.PathSeparator)) ||
 			strings.HasSuffix(path, string(os.PathSeparator)+ig) ||
 			strings.HasPrefix(filepath.Base(path), ig) {
+			return true
+		}
+	}
+	for _, ig := range ignoreFiles {
+		if strings.HasPrefix(filepath.Base(path), ig) {
 			return true
 		}
 	}
@@ -247,7 +282,7 @@ func traverseDir(root string) ([]string, error) {
 			return err
 		}
 		unixy := "/" + filepath.ToSlash(rel)
-		if dirIgnored(p) {
+		if dirIgnored(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -298,10 +333,11 @@ func handleListProjectFiles(_ string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	var b strings.Builder
 	b.WriteString("<project-entries>\n")
 	for _, e := range entries {
-		b.WriteString(projectRootName)
+		b.WriteString(".")
 		b.WriteString(e)
 		if !strings.HasSuffix(e, "\n") {
 			b.WriteString("\n")
@@ -517,4 +553,32 @@ func handlePatchTextFile(argsJSON string) (string, error) {
 	// Return updated file
 	updatedView, _ := handleReadFiles(fmt.Sprintf(`{"filePaths":[%q]}`, args.FilePath))
 	return fmt.Sprintf("Applied %d patch(es) to '%s'.\n\nHere is the updated file:\n\n%s", len(args.Patches), args.FilePath, updatedView), nil
+}
+
+func handleGrep(argsJSON string) (string, error) {
+	var args struct {
+		Cmd string `json:"cmd"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(args.Cmd) == "" {
+		return "", errors.New("no command provided")
+	}
+
+	cmd := exec.Command(
+		"/bin/sh", "-c",
+		args.Cmd,
+		fmt.Sprintf("--exclude-dir={%s}", strings.Join(ignoreDirs, ",")),
+		fmt.Sprintf("--exclude={%s}", strings.Join(ignoreFiles, ",")),
+	)
+	cmd.Dir = projectRootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("Grep error:", err)
+		// Return raw output even on non-zero exit (e.g., no matches)
+		return string(out), nil
+	}
+	log.Println(string(out))
+	return string(out), nil
 }
