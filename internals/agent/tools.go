@@ -31,6 +31,34 @@ const (
 var (
 	projectRootDir  string
 	projectRootName string
+	ignoreDirs      = []string{
+		"\\.venv",
+		"env",
+		"\\.env",
+		"\\.env",
+		"\\.git",
+		"\\.vscode",
+		".idea",
+		"node_modules",
+		"__pycache__",
+		"build",
+		"dist",
+		"\\.cache",
+		"\\.tmp",
+		"tmp",
+	}
+	ignoreFiles = []string{
+		"\\.DS_Store",
+		"\\.env",
+		"*.env.*",
+		"*.log",
+		"*.db",
+		"*.sqlite",
+		"*.egg",
+		"*.egg-info",
+		"*.pyc",
+		"*.ignore.*",
+	}
 )
 
 func init() {
@@ -40,35 +68,8 @@ func init() {
 	}
 	projectRootDir = cwd
 	projectRootName = filepath.Base(projectRootDir)
-}
 
-var ignoreDirs = []string{
-	".venv",
-	"env",
-	".env",
-	".git",
-	".vscode",
-	".idea",
-	"node_modules",
-	"__pycache__",
-	"build",
-	"dist",
-	".cache",
-	".tmp",
-	"tmp",
-}
-
-var ignoreFiles = []string{
-	".DS_Store",
-	".env",
-	"*.env.*",
-	"*.log",
-	"*.db",
-	"*.sqlite",
-	"*.egg",
-	"*.egg-info",
-	"*.pyc",
-	"*.ignore.*",
+	detectGitIgnores()
 }
 
 // Tools is the list of OpenAI function tools exposed to the model.
@@ -254,6 +255,7 @@ func buildPathFromRootDir(entryPath string) string {
 
 func dirIgnored(path string) bool {
 	for _, ig := range ignoreDirs {
+		ig = strings.ReplaceAll(ig, "\\", "")
 		if strings.Contains(path, string(os.PathSeparator)+ig+string(os.PathSeparator)) ||
 			strings.HasSuffix(path, string(os.PathSeparator)+ig) ||
 			strings.HasPrefix(filepath.Base(path), ig) {
@@ -261,6 +263,7 @@ func dirIgnored(path string) bool {
 		}
 	}
 	for _, ig := range ignoreFiles {
+		ig = strings.ReplaceAll(ig, "\\", "")
 		if strings.HasPrefix(filepath.Base(path), ig) {
 			return true
 		}
@@ -281,7 +284,7 @@ func traverseDir(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		unixy := "/" + filepath.ToSlash(rel)
+		unixy := "./" + filepath.ToSlash(rel)
 		if dirIgnored(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
@@ -337,7 +340,6 @@ func handleListProjectFiles(_ string) (string, error) {
 	var b strings.Builder
 	b.WriteString("<project-entries>\n")
 	for _, e := range entries {
-		b.WriteString(".")
 		b.WriteString(e)
 		if !strings.HasSuffix(e, "\n") {
 			b.WriteString("\n")
@@ -566,12 +568,12 @@ func handleGrep(argsJSON string) (string, error) {
 		return "", errors.New("no command provided")
 	}
 
-	cmd := exec.Command(
-		"/bin/sh", "-c",
+	fullCmd := fmt.Sprintf("%s --exclude-dir={%s} --exclude={%s}",
 		args.Cmd,
-		fmt.Sprintf("--exclude-dir={%s}", strings.Join(ignoreDirs, ",")),
-		fmt.Sprintf("--exclude={%s}", strings.Join(ignoreFiles, ",")),
-	)
+		strings.Join(ignoreDirs, ","),
+		strings.Join(ignoreFiles, ","))
+
+	cmd := exec.Command("/bin/sh", "-c", fullCmd)
 	cmd.Dir = projectRootDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -581,4 +583,48 @@ func handleGrep(argsJSON string) (string, error) {
 	}
 	log.Println(string(out))
 	return string(out), nil
+}
+
+func detectGitIgnores() {
+	entries, _ := traverseDir(projectRootDir)
+	dedup := make(map[string]struct{}, len(ignoreFiles))
+	for _, v := range ignoreFiles {
+		dedup[v] = struct{}{}
+	}
+	for _, e := range entries {
+		if filepath.Base(e) != ".gitignore" {
+			continue
+		}
+
+		fullPath := filepath.Join(projectRootDir, e)
+		data, rErr := os.ReadFile(fullPath)
+		if rErr != nil {
+			continue
+		}
+
+		lines := safeSplit(string(data))
+
+		for _, raw := range lines {
+			s := strings.TrimSpace(raw)
+			if _, ok := dedup[s]; ok || s == "" || strings.HasPrefix(s, "#") || strings.HasPrefix(s, "!") {
+				continue
+			}
+
+			dedup[s] = struct{}{}
+
+			isDir := strings.HasSuffix(s, "/")
+			s = strings.TrimPrefix(s, "/")
+			s = strings.TrimSuffix(s, "/")
+			s = filepath.ToSlash(s)
+
+			if s == "" {
+				continue
+			}
+			if isDir {
+				ignoreDirs = append(ignoreDirs, s)
+			} else {
+				ignoreFiles = append(ignoreFiles, s)
+			}
+		}
+	}
 }
