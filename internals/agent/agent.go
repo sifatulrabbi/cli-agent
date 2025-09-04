@@ -10,11 +10,21 @@ import (
 	"github.com/openai/openai-go/v2/shared"
 )
 
+type ModelInfo struct {
+	Name      shared.ChatModel
+	Reasoning openai.ReasoningEffort
+}
+
+func (m ModelInfo) String() string {
+	return string(m.Name) + "/" + string(m.Reasoning)
+}
+
 const UpdateSig = "update"
 
 var (
-	OPENAI_API_KEY string
+	OPENAI_API_KEY string = ""
 	OpenAIClient   openai.Client
+	Model          = ModelInfo{openai.ChatModelGPT5Mini, openai.ReasoningEffortLow}
 )
 
 func init() {
@@ -49,8 +59,8 @@ func ChatWithLLM(question string) chan string {
 			withSysPrompt = append(withSysPrompt, History...)
 			params := openai.ChatCompletionNewParams{
 				Messages:          withSysPrompt,
-				Model:             openai.ChatModelGPT5Nano,
-				ReasoningEffort:   shared.ReasoningEffortLow,
+				Model:             Model.Name,
+				ReasoningEffort:   Model.Reasoning,
 				Tools:             Tools,
 				ParallelToolCalls: openai.Bool(false),
 			}
