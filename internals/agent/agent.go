@@ -23,9 +23,7 @@ func init() {
 		log.Fatalln("OPENAI_API_KEY is not found but is required!")
 	}
 
-	OpenAIClient = openai.NewClient(
-		option.WithAPIKey(os.Getenv("OPENAI_API_KEY")),
-	)
+	OpenAIClient = openai.NewClient(option.WithAPIKey(OPENAI_API_KEY))
 }
 
 var History = []openai.ChatCompletionMessageParamUnion{}
@@ -49,7 +47,6 @@ func ChatWithLLM(question string) chan string {
 		for {
 			withSysPrompt := append([]openai.ChatCompletionMessageParamUnion{}, openai.DeveloperMessage(SysPrompt))
 			withSysPrompt = append(withSysPrompt, History...)
-
 			params := openai.ChatCompletionNewParams{
 				Messages:          withSysPrompt,
 				Model:             openai.ChatModelGPT5Nano,
@@ -60,6 +57,7 @@ func ChatWithLLM(question string) chan string {
 
 			stream := OpenAIClient.Chat.Completions.NewStreaming(context.TODO(), params)
 
+			pendingCalls := []openai.FinishedChatCompletionToolCall{}
 			acc := openai.ChatCompletionAccumulator{}
 			for stream.Next() {
 				chunk := stream.Current()
@@ -69,7 +67,7 @@ func ChatWithLLM(question string) chan string {
 					log.Println("Content generation finished")
 				}
 				if tool, ok := acc.JustFinishedToolCall(); ok {
-					log.Println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
+					pendingCalls = append(pendingCalls, tool)
 				}
 				if refusal, ok := acc.JustFinishedRefusal(); ok {
 					log.Println("Refusal stream finished:", refusal)
@@ -94,41 +92,63 @@ func ChatWithLLM(question string) chan string {
 				sendUpdateSig()
 			}
 
-			// Collect tool calls, if any
 			var toolCalls []openai.ChatCompletionMessageToolCallUnion
 			if len(acc.Choices) > 0 {
 				toolCalls = acc.Choices[0].Message.ToolCalls
 			}
 
-			if len(toolCalls) == 0 {
+			if len(pendingCalls) == 0 && len(toolCalls) == 0 {
 				// No tools requested; we're done.
 				break
 			}
 
-			// Execute each tool call and append tool messages
-			for _, tc := range toolCalls {
-				f := tc.AsFunction()
-				name := f.Function.Name
-				args := f.Function.Arguments
-				id := f.ID
+			// Execute tool calls captured during streaming when available; otherwise fallback
+			if len(pendingCalls) > 0 {
+				for _, pc := range pendingCalls {
+					name := pc.Name
+					args := pc.Arguments
+					id := pc.ID
+					handler := ToolHandlers[name]
 
-				handler := ToolHandlers[name]
-				var out string
-				if handler == nil {
-					out = "Tool '" + name + "' not implemented."
-				} else {
-					res, err := handler(args)
-					if err != nil {
-						// Return readable error instead of failing hard; model can react.
-						out = err.Error()
+					var out string
+					if handler == nil {
+						out = "Tool '" + name + "' not implemented."
 					} else {
-						out = res
+						res, err := handler(args)
+						if err != nil {
+							out = err.Error()
+						} else {
+							out = res
+						}
 					}
-				}
 
-				History = append(History, openai.ToolMessage(out, id))
+					History = append(History, openai.ToolMessage(out, id))
+					sendUpdateSig()
+				}
+			} else {
+				for _, tc := range toolCalls {
+					f := tc.AsFunction()
+					name := f.Function.Name
+					args := f.Function.Arguments
+					id := f.ID
+					handler := ToolHandlers[name]
+
+					var out string
+					if handler == nil {
+						out = "Tool '" + name + "' not implemented."
+					} else {
+						res, err := handler(args)
+						if err != nil {
+							out = err.Error()
+						} else {
+							out = res
+						}
+					}
+
+					History = append(History, openai.ToolMessage(out, id))
+					sendUpdateSig()
+				}
 			}
-			sendUpdateSig()
 		}
 	}()
 

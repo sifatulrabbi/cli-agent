@@ -17,12 +17,12 @@ import (
 type ToolName string
 
 const (
-	ToolListProjectFilesAndDirs ToolName = "ls"
-	ToolReadFiles               ToolName = "read_files"
-	ToolCreateEntity            ToolName = "create_entity"
-	ToolRemoveEntity            ToolName = "remove_entity"
-	ToolInsertIntoTextFile      ToolName = "append_file"
-	ToolPatchTextFile           ToolName = "patch_file"
+	ToolLs           ToolName = "ls"
+	ToolReadFiles    ToolName = "read_files"
+	ToolCreateEntity ToolName = "create_entity"
+	ToolRemoveEntity ToolName = "remove_entity"
+	ToolAppendFile   ToolName = "append_file"
+	ToolPatchFile    ToolName = "patch_file"
 )
 
 var (
@@ -50,12 +50,16 @@ var ignorePaths = []string{
 	"node_modules",
 	"__pycache__",
 	"build",
+	"dist",
+	".cache",
+	".tmp",
+	"tmp",
 }
 
 // Tools is the list of OpenAI function tools exposed to the model.
 var Tools = []openai.ChatCompletionToolUnionParam{
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        string(ToolListProjectFilesAndDirs),
+		Name:        string(ToolLs),
 		Description: openai.String("List all files, directories, and sub directories of the current project."),
 		Parameters: shared.FunctionParameters{
 			"type":       "object",
@@ -121,7 +125,7 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        string(ToolInsertIntoTextFile),
+		Name:        string(ToolAppendFile),
 		Description: openai.String("Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
@@ -152,7 +156,7 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 		},
 	}),
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-		Name:        string(ToolPatchTextFile),
+		Name:        string(ToolPatchFile),
 		Description: openai.String("Patch a text file by replacing existing line ranges only. Insertion is not supported here; use 'append_file' for insertions. Must provide the full path (obtainable via 'ls' tool)."),
 		Parameters: shared.FunctionParameters{
 			"type": "object",
@@ -190,12 +194,12 @@ var Tools = []openai.ChatCompletionToolUnionParam{
 
 // ToolHandlers maps tool name to an executor that returns a string result.
 var ToolHandlers = map[string]func(argsJSON string) (string, error){
-	string(ToolListProjectFilesAndDirs): handleListProjectFiles,
-	string(ToolReadFiles):               handleReadFiles,
-	string(ToolCreateEntity):            handleCreateEntity,
-	string(ToolRemoveEntity):            handleRemoveEntity,
-	string(ToolInsertIntoTextFile):      handleInsertIntoTextFile,
-	string(ToolPatchTextFile):           handlePatchTextFile,
+	string(ToolLs):           handleListProjectFiles,
+	string(ToolReadFiles):    handleReadFiles,
+	string(ToolCreateEntity): handleCreateEntity,
+	string(ToolRemoveEntity): handleRemoveEntity,
+	string(ToolAppendFile):   handleInsertIntoTextFile,
+	string(ToolPatchFile):    handlePatchTextFile,
 }
 
 // ----------------------
