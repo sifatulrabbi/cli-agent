@@ -38,7 +38,7 @@ func ChatWithLLM(question string) chan string {
 	}
 
 	History = append(History, openai.UserMessage(question))
-	History = append(History, openai.AssistantMessage(""))
+	History = append(History, openai.AssistantMessage("Processing your request..."))
 	sendUpdateSig()
 
 	go func() {
@@ -149,6 +149,8 @@ func ChatWithLLM(question string) chan string {
 					sendUpdateSig()
 				}
 			}
+
+			History = append(History, openai.AssistantMessage("Processing tool results..."))
 		}
 	}()
 

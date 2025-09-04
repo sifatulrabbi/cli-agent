@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/sifatulrabbi/tea-play/internals/agent"
 )
+
+const DefaultTruncateLength = 200
 
 // renderHistory builds the viewport content from the agent's full History.
 func renderHistory(width int) string {
@@ -32,6 +35,7 @@ func renderHistory(width int) string {
 		case msg.OfAssistant != nil:
 			b.WriteString(labelSt.Render("» AI"))
 			b.WriteString("\n")
+
 			if msg.OfAssistant.Content.OfString.Valid() {
 				b.WriteString(wrapToWidth(msg.OfAssistant.Content.OfString.Value, width))
 			} else if len(msg.OfAssistant.Content.OfArrayOfContentParts) > 0 {
@@ -43,22 +47,53 @@ func renderHistory(width int) string {
 			} else if msg.GetRefusal() != nil {
 				b.WriteString(wrapToWidth(*msg.GetRefusal(), width))
 			}
-			b.WriteString("\n")
 
-		case msg.OfTool != nil:
-			b.WriteString(labelSt.Render("» TOOL"))
-			b.WriteString("\n")
-			if msg.OfTool.Content.OfString.Valid() {
-				b.WriteString(wrapToWidth(msg.OfTool.Content.OfString.Value, width))
-			} else if len(msg.OfTool.Content.OfArrayOfContentParts) > 0 {
-				for _, part := range msg.OfTool.Content.OfArrayOfContentParts {
-					// Tool content parts are text-only in this union
-					b.WriteString(wrapToWidth(part.Text, width))
+			// If the assistant requested any tool calls, render the requested tools list
+			if len(msg.OfAssistant.ToolCalls) > 0 {
+				b.WriteString("\n")
+				b.WriteString(wrapToWidth(italicText.Render("🔧 Using tools:"), width))
+				b.WriteString("\n")
+
+				for _, tc := range msg.OfAssistant.ToolCalls {
+					name := tc.GetFunction().Name
+					args := truncateString(mutedText.Render(tc.GetFunction().Arguments), DefaultTruncateLength)
+					if args != "" {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s args: %s", name, args)), width))
+					} else {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s", name)), width))
+					}
+					b.WriteString("\n")
 				}
 			}
 			b.WriteString("\n")
+
+		case msg.OfTool != nil:
+			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", msg.OfTool.ToolCallID)))
+			b.WriteString("\n")
+
+			toolContent := strings.Builder{}
+			if msg.OfTool.Content.OfString.Valid() {
+				toolContent.WriteString(msg.OfTool.Content.OfString.Value)
+			} else if len(msg.OfTool.Content.OfArrayOfContentParts) > 0 {
+				for _, part := range msg.OfTool.Content.OfArrayOfContentParts {
+					// Tool content parts are text-only in this union
+					toolContent.WriteString(part.Text)
+				}
+			}
+
+			truncatedContent := truncateString(toolContent.String(), DefaultTruncateLength)
+			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(truncatedContent), width))
+			b.WriteString("\n")
+
+		case msg.OfFunction != nil:
+			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", msg.OfFunction.Name)))
+			b.WriteString("\n")
+			truncatedContent := truncateString(msg.OfFunction.Content.Value, DefaultTruncateLength)
+			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(truncatedContent), width))
+			b.WriteString("\n")
 		}
 	}
+
 	return b.String()
 }
 
@@ -90,4 +125,11 @@ func wrapToWidth(s string, width int) string {
 	}
 
 	return strings.Join(newLines, "\n")
+}
+
+func truncateString(s string, maxLength int) string {
+	if len(s) > maxLength {
+		return s[:maxLength] + "..."
+	}
+	return s
 }
