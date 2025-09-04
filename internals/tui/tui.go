@@ -208,7 +208,7 @@ func (m model) View() string {
 		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
 	}
 	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
-	controls := helpSt.Render("Enter: submit  •  /exit: quit  •  Esc: clear  •  Linebreaks are not supported")
+	controls := helpSt.Render("Enter: submit  •  /exit: quit  •  /clear: clear history  •  Linebreaks are not supported yet")
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
 		Width(max(m.width, 1)).

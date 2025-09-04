@@ -1,13 +1,13 @@
 package agent
 
 import (
-	"context"
-	"log"
-	"os"
+    "context"
+    "log"
+    "os"
 
-	"github.com/openai/openai-go/v2"
-	"github.com/openai/openai-go/v2/option"
-	"github.com/openai/openai-go/v2/shared"
+    "github.com/openai/openai-go/v2"
+    "github.com/openai/openai-go/v2/option"
+    "github.com/openai/openai-go/v2/shared"
 )
 
 const UpdateSig = "update"
@@ -31,7 +31,7 @@ func init() {
 var History = []openai.ChatCompletionMessageParamUnion{}
 
 func ChatWithLLM(question string) chan string {
-	ch := make(chan string, 1024)
+    ch := make(chan string, 1024)
 	sendUpdateSig := func() {
 		select {
 		case ch <- UpdateSig:
@@ -43,53 +43,104 @@ func ChatWithLLM(question string) chan string {
 	History = append(History, openai.AssistantMessage("Please wait..."))
 	sendUpdateSig()
 
-	go func() {
-		defer close(ch)
+    go func() {
+        defer close(ch)
 
-		params := openai.ChatCompletionNewParams{
-			Messages:        History,
-			Model:           openai.ChatModelGPT5Nano,
-			ReasoningEffort: shared.ReasoningEffortLow,
-		}
-		stream := OpenAIClient.Chat.Completions.NewStreaming(context.TODO(), params)
+        for {
+            // Build prompt with system + history
+            withSysPrompt := append([]openai.ChatCompletionMessageParamUnion{}, openai.DeveloperMessage(SysPrompt))
+            withSysPrompt = append(withSysPrompt, History...)
 
-		defer func() {
-			if err := stream.Close(); err != nil {
-				log.Println("Error during stream.Close():", err)
-			}
-		}()
+            params := openai.ChatCompletionNewParams{
+                Messages:          withSysPrompt,
+                Model:             openai.ChatModelGPT5Nano,
+                ReasoningEffort:   shared.ReasoningEffortLow,
+                Tools:             Tools,
+                ParallelToolCalls: openai.Bool(false),
+            }
 
-		acc := openai.ChatCompletionAccumulator{}
+            stream := OpenAIClient.Chat.Completions.NewStreaming(context.TODO(), params)
 
-		for stream.Next() {
-			chunk := stream.Current()
-			acc.AddChunk(chunk)
+            acc := openai.ChatCompletionAccumulator{}
+            for stream.Next() {
+                chunk := stream.Current()
+                acc.AddChunk(chunk)
 
-			if _, ok := acc.JustFinishedContent(); ok {
-				log.Println("Content generation finished")
-			}
-			if tool, ok := acc.JustFinishedToolCall(); ok {
-				log.Println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
-			}
-			if refusal, ok := acc.JustFinishedRefusal(); ok {
-				log.Println("Refusal stream finished:", refusal)
-			}
+                if _, ok := acc.JustFinishedContent(); ok {
+                    log.Println("Content generation finished")
+                }
+                if tool, ok := acc.JustFinishedToolCall(); ok {
+                    log.Println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
+                }
+                if refusal, ok := acc.JustFinishedRefusal(); ok {
+                    log.Println("Refusal stream finished:", refusal)
+                }
 
-			if stream.Err() != nil {
-				log.Fatalln("Error in the stream:", stream.Err())
-			}
+                if stream.Err() != nil {
+                    log.Fatalln("Error in the stream:", stream.Err())
+                }
 
-			if len(acc.Choices) > 0 {
-				History[len(History)-1] = acc.Choices[0].Message.ToParam()
-				sendUpdateSig()
-			}
-		}
+                if len(acc.Choices) > 0 {
+                    History[len(History)-1] = acc.Choices[0].Message.ToParam()
+                    sendUpdateSig()
+                }
+            }
 
-		if len(acc.Choices) > 0 {
-			History[len(History)-1] = acc.Choices[0].Message.ToParam()
-			sendUpdateSig()
-		}
-	}()
+            if err := stream.Close(); err != nil {
+                log.Println("Error during stream.Close():", err)
+            }
+
+            if len(acc.Choices) > 0 {
+                History[len(History)-1] = acc.Choices[0].Message.ToParam()
+                sendUpdateSig()
+            }
+
+            // Collect tool calls, if any
+            var toolCalls []openai.ChatCompletionMessageToolCallUnion
+            if len(acc.Choices) > 0 {
+                toolCalls = acc.Choices[0].Message.ToolCalls
+            }
+
+            if len(toolCalls) == 0 {
+                // No tools requested; we're done.
+                break
+            }
+
+            // Execute each tool call and append tool messages
+            for _, tc := range toolCalls {
+                f := tc.AsFunction()
+                name := f.Function.Name
+                args := f.Function.Arguments
+                id := f.ID
+
+                handler := ToolHandlers[name]
+                var out string
+                if handler == nil {
+                    out = "Tool '" + name + "' not implemented."
+                } else {
+                    res, err := handler(args)
+                    if err != nil {
+                        // Return readable error instead of failing hard; model can react.
+                        out = err.Error()
+                    } else {
+                        out = res
+                    }
+                }
+
+                // Append tool response to history
+                History = append(History, openai.ToolMessage(out, id))
+
+                // Optionally surface a minimal update to the UI buffer
+                // by appending a short assistant placeholder before next call
+            }
+
+            // After tool messages, append an assistant placeholder so the next streamed
+            // assistant reply has a slot to overwrite for the UI rendering
+            History = append(History, openai.AssistantMessage("Please wait..."))
+            sendUpdateSig()
+            // loop again for next turn
+        }
+    }()
 
 	return ch
 }
