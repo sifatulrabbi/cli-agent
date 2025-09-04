@@ -14,7 +14,8 @@ import (
 	"github.com/openai/openai-go/v2/shared"
 )
 
-// Tool name constants to avoid manual strings
+type ToolName string
+
 const (
 	ToolListProjectFilesAndDirs ToolName = "ls"
 	ToolReadFiles               ToolName = "read_files"
@@ -24,17 +25,19 @@ const (
 	ToolPatchTextFile           ToolName = "patch_file"
 )
 
-// ToolName is a typed alias for tool identifiers
-type ToolName string
-
-// Active project configuration (relative to repo root)
-// By default we operate inside testBench/workspace, mirroring the TS tools.
-const (
-	activeProjectDir = "workspace"
-	testingDir       = "testBench"
+var (
+	projectRootDir  string
+	projectRootName string
 )
 
-var projectRootDir = filepath.Join(testingDir, activeProjectDir)
+func init() {
+	cwd, err := os.Getwd()
+	if err != nil || cwd == "" {
+		cwd = "/tmp"
+	}
+	projectRootDir = cwd
+	projectRootName = filepath.Base(projectRootDir)
+}
 
 var ignorePaths = []string{
 	".venv",
@@ -200,15 +203,18 @@ var ToolHandlers = map[string]func(argsJSON string) (string, error){
 // ----------------------
 
 func buildPathFromRootDir(entryPath string) string {
-	p := entryPath
-	// Normalize any leading workspace prefix
-	if strings.HasPrefix(p, "/"+activeProjectDir+"/") {
-		p = strings.TrimPrefix(p, "/"+activeProjectDir)
-	} else if strings.HasPrefix(p, activeProjectDir+"/") {
-		p = strings.TrimPrefix(p, activeProjectDir)
+	// Normalize slashes for safe prefix checks, then convert back
+	p := filepath.ToSlash(entryPath)
+	// Normalize any leading root prefix (with or without starting slash)
+	if strings.HasPrefix(p, "/"+projectRootName+"/") {
+		p = strings.TrimPrefix(p, "/"+projectRootName+"/")
+	} else if strings.HasPrefix(p, projectRootName+"/") {
+		p = strings.TrimPrefix(p, projectRootName+"/")
 	}
 	// Normalize leading slash to make Join behavior predictable
 	p = strings.TrimPrefix(p, "/")
+	// Convert back to OS-specific separators for joining
+	p = filepath.FromSlash(p)
 	return filepath.Join(projectRootDir, p)
 }
 
@@ -291,7 +297,7 @@ func handleListProjectFiles(_ string) (string, error) {
 	var b strings.Builder
 	b.WriteString("<project-entries>\n")
 	for _, e := range entries {
-		b.WriteString(activeProjectDir)
+		b.WriteString(projectRootName)
 		b.WriteString(e)
 		if !strings.HasSuffix(e, "\n") {
 			b.WriteString("\n")
