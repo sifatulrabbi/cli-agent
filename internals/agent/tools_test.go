@@ -20,7 +20,6 @@ func TestListProjectFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ls tool error: %v", err)
 	}
-	fmt.Println("out:", out)
 	assertContains(t, out, "<project-entries>")
 	assertContains(t, out, projectRootName+"/README.md")
 	assertContains(t, out, projectRootName+"/dir1/")
@@ -47,7 +46,9 @@ func TestCreateEntity_Dir(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"dir","entityName":%q,"content":""}`, projectRootName+"/newdir", projectRootName+"/newdir")
+	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"dir","entityName":%q,"content":""}`,
+		projectRootName+"/newdir",
+		projectRootName+"/newdir")
 	out, err := handleCreateEntity(args)
 	if err != nil {
 		t.Fatalf("create_entity dir error: %v", err)
@@ -60,7 +61,9 @@ func TestCreateEntity_File(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"file","entityName":%q,"content":"first\nsecond"}`, projectRootName+"/newdir/note.txt", projectRootName+"/newdir/note.txt")
+	args := fmt.Sprintf(`{"entityPath":%q,"entityType":"file","entityName":%q,"content":"first\nsecond"}`,
+		projectRootName+"/newdir/note.txt",
+		projectRootName+"/newdir/note.txt")
 	_, err := handleCreateEntity(args)
 	if err != nil {
 		t.Fatalf("create_entity file error: %v", err)
