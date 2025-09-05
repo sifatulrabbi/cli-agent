@@ -7,6 +7,7 @@ import (
 
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/responses"
 	"github.com/openai/openai-go/v2/shared"
 )
 
@@ -15,11 +16,19 @@ type ModelInfo struct {
 	Reasoning openai.ReasoningEffort
 }
 
+type AgentHistory struct {
+	InputParams *responses.ResponseNewParams
+	Output      *responses.Response
+}
+
 func (m ModelInfo) String() string {
 	return string(m.Name) + "/" + string(m.Reasoning)
 }
 
-const UpdateSig = "update"
+const (
+	UpdateSig    = "update"
+	UpdateSigNew = "update_new"
+)
 
 var (
 	OPENAI_API_KEY string = ""
@@ -36,7 +45,10 @@ func init() {
 	OpenAIClient = openai.NewClient(option.WithAPIKey(OPENAI_API_KEY))
 }
 
-var History = []openai.ChatCompletionMessageParamUnion{}
+var (
+	History    = []openai.ChatCompletionMessageParamUnion{}
+	HistoryNew = []*AgentHistory{}
+)
 
 func ChatWithLLM(question string) chan string {
 	ch := make(chan string, 1024)
@@ -161,6 +173,93 @@ func ChatWithLLM(question string) chan string {
 			}
 
 			History = append(History, openai.AssistantMessage("Processing tool results..."))
+		}
+	}()
+
+	return ch
+}
+
+func ChatWithLLMNew(question string) chan string {
+	ch := make(chan string, 1024)
+	sendUpdateSig := func() {
+		select {
+		case ch <- UpdateSigNew:
+		default:
+		}
+	}
+
+	sendUpdateSig()
+
+	go func() {
+		defer close(ch)
+
+		for {
+			var prevTurn *AgentHistory = nil
+			if len(HistoryNew) > 0 {
+				prevTurn = HistoryNew[len(HistoryNew)-1]
+			}
+
+			turn := AgentHistory{
+				InputParams: &responses.ResponseNewParams{
+					Instructions: openai.String(SysPrompt),
+					Model:        Model.Name,
+					Reasoning: shared.ReasoningParam{
+						Effort:  Model.Reasoning,
+						Summary: shared.ReasoningSummaryAuto,
+					},
+					Tools: ToolsNew,
+					Input: responses.ResponseNewParamsInputUnion{
+						OfString: openai.String(question),
+					},
+				},
+				Output: nil,
+			}
+			if prevTurn != nil && prevTurn.Output != nil && prevTurn.Output.ID != "" {
+				turn.InputParams.PreviousResponseID = openai.String(prevTurn.Output.ID)
+			}
+			HistoryNew = append(HistoryNew, &turn)
+			sendUpdateSig()
+
+			log.Println("Invoking the llm using response api...")
+			res, err := OpenAIClient.Responses.New(context.TODO(), *turn.InputParams)
+			if err != nil {
+				log.Println("Error during response creation:", err)
+				return
+			}
+			log.Println("LLM responded.")
+			turn.Output = res
+			HistoryNew[len(HistoryNew)-1] = &turn
+			sendUpdateSig()
+
+			toolCalls := []responses.ResponseFunctionToolCall{}
+			for _, part := range res.Output {
+				if part.Type != "function_call" {
+					continue
+				}
+				fnCall := part.AsFunctionCall()
+				toolCalls = append(toolCalls, fnCall)
+			}
+
+			if len(toolCalls) < 1 {
+				// no tool calls thus end of the agent loop
+				break
+			}
+
+			log.Printf("LLM used %d tools.\n", len(toolCalls))
+			for _, tc := range toolCalls {
+				// toolRes := ""
+				handler := ToolHandlers[tc.Name]
+				if handler != nil {
+					if _, err := handler(tc.Arguments); err != nil {
+						log.Println("Tool ERROR:", err)
+					} else {
+						log.Println("Tool used:", tc.Name)
+					}
+				} else {
+					log.Println("ERROR: invalid tool call from the model:", tc.RawJSON())
+				}
+			}
+			break // TODO:
 		}
 	}()
 

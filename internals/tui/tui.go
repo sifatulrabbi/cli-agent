@@ -18,11 +18,12 @@ import (
 )
 
 type (
-	ErrMsg         string
-	InfoMsg        string
-	streamChunkMsg string
-	streamDoneMsg  struct{}
-	ClearStatusMsg struct{}
+	ErrMsg            string
+	InfoMsg           string
+	streamChunkMsg    string
+	streamChunkMsgNew string
+	streamDoneMsg     struct{}
+	ClearStatusMsg    struct{}
 )
 
 const (
@@ -126,12 +127,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			ch := agent.ChatWithLLM(val)
-			m.ch = ch
-
 			m.busy = true
-			m.busyStatus = "Processing…"
-
+			if strings.HasPrefix(val, "/new ") {
+				m.ch = agent.ChatWithLLMNew(strings.TrimPrefix(val, "/new "))
+				m.busyStatus = "Processing New…"
+			} else {
+				m.ch = agent.ChatWithLLM(val)
+				m.busyStatus = "Processing…"
+			}
 			m.vp.SetContent(renderHistory(m.vp.Width))
 			m.vp.GotoBottom()
 
@@ -164,6 +167,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		isAtBottom := m.vp.AtBottom()
 		// Re-render the full history (agent updates History incrementally)
 		m.vp.SetContent(renderHistory(m.vp.Width))
+		if isAtBottom {
+			m.vp.GotoBottom()
+		}
+		return m, m.waitForChunk()
+
+	case streamChunkMsgNew:
+		m.busyStatus = "Thinking…"
+		m.busy = true
+		isAtBottom := m.vp.AtBottom()
+		// Re-render the full history (agent updates History incrementally)
+		m.vp.SetContent(renderHistoryNew(m.vp.Width))
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
@@ -215,6 +229,9 @@ func (m model) View() string {
 func (m model) waitForChunk() tea.Cmd {
 	return func() tea.Msg {
 		if s, ok := <-m.ch; ok {
+			if s == agent.UpdateSigNew {
+				return streamChunkMsgNew(s)
+			}
 			return streamChunkMsg(s)
 		}
 		return streamDoneMsg{}

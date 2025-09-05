@@ -95,6 +95,108 @@ func renderHistory(width int) string {
 	return b.String()
 }
 
+func renderHistoryNew(width int) string {
+	var b strings.Builder
+
+	for _, msg := range agent.HistoryNew {
+		if msg.InputParams != nil {
+			b.WriteString("\n")
+			contentBuf := strings.Builder{}
+			userInputArea := inputBoxSt.Width(width - 2)
+			maxW := userInputArea.GetWidth() - 2 // because of the inner padding of the user message viewer
+			if msg.InputParams.Input.OfString.Valid() {
+				contentBuf.WriteString(wrapToWidth(msg.InputParams.Input.OfString.Value, maxW))
+			}
+			b.WriteString(userInputArea.Padding(0, 1).Render(contentBuf.String()))
+			b.WriteString("\n")
+		}
+
+		if msg.Output != nil {
+			b.WriteString(labelSt.Render("» AI"))
+			b.WriteString("\n")
+
+			for _, part := range msg.Output.Output {
+				// Any of "message", "file_search_call", "function_call", "web_search_call",
+				// "computer_call", "reasoning", "image_generation_call", "code_interpreter_call",
+				// "local_shell_call", "mcp_call", "mcp_list_tools", "mcp_approval_request",
+				// "custom_tool_call".
+				switch part.Type {
+				case "reasoning":
+					r := part.AsReasoning()
+					content := ""
+					for _, c := range r.Content {
+						content += c.Text
+					}
+					content += "\n"
+					for _, c := range r.Summary {
+						content += c.Text
+					}
+					b.WriteString(mutedText.Width(width).Render(wrapToWidth(content, width-2)))
+
+				case "message":
+					msg := part.AsMessage()
+					content := ""
+					for _, c := range msg.Content {
+						content += c.Text
+					}
+					b.WriteString(wrapToWidth(content, width-2))
+
+				case "function_call":
+					fnCall := part.AsFunctionCall()
+					args := mutedText.Render(fnCall.Arguments)
+					if args != "" {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s args: %s", fnCall.Name, args)), width))
+					} else {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s", fnCall.Name)), width))
+					}
+					b.WriteString("\n")
+
+				case "custom_tool_call":
+					customTool := part.AsCustomToolCall()
+					args := mutedText.Render(customTool.Input)
+					if args != "" {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s args: %s", customTool.Name, args)), width))
+					} else {
+						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s", customTool.Name)), width))
+					}
+					b.WriteString("\n")
+				}
+			}
+
+			b.WriteString("\n")
+		}
+	}
+
+	// for _, msg := range agent.History {
+	// 	switch {
+	// 	case msg.OfTool != nil:
+	// 		b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", msg.OfTool.ToolCallID)))
+	// 		b.WriteString("\n")
+	//
+	// 		toolContent := strings.Builder{}
+	// 		if msg.OfTool.Content.OfString.Valid() {
+	// 			toolContent.WriteString(msg.OfTool.Content.OfString.Value)
+	// 		} else if len(msg.OfTool.Content.OfArrayOfContentParts) > 0 {
+	// 			for _, part := range msg.OfTool.Content.OfArrayOfContentParts {
+	// 				// Tool content parts are text-only in this union
+	// 				toolContent.WriteString(part.Text)
+	// 			}
+	// 		}
+	//
+	// 		b.WriteString(wrapToWidth(mutedText.Italic(true).Render(toolContent.String()), width))
+	// 		b.WriteString("\n")
+	//
+	// 	case msg.OfFunction != nil:
+	// 		b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", msg.OfFunction.Name)))
+	// 		b.WriteString("\n")
+	// 		b.WriteString(wrapToWidth(mutedText.Italic(true).Render(msg.OfFunction.Content.Value), width))
+	// 		b.WriteString("\n")
+	// 	}
+	// }
+
+	return b.String()
+}
+
 // wraps longer lines to fit into the viewport, this is a dirty line wrapper that works okay for English but will not work well for code
 func wrapToWidth(s string, width int) string {
 	if width < 30 {
@@ -124,10 +226,3 @@ func wrapToWidth(s string, width int) string {
 
 	return strings.Join(newLines, "\n")
 }
-
-// func truncateString(s string, maxLength int) string {
-// 	if len(s) > maxLength {
-// 		return s[:maxLength] + "..."
-// 	}
-// 	return s
-// }

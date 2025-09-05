@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/responses"
 	"github.com/openai/openai-go/v2/shared"
 )
 
@@ -72,7 +73,170 @@ func init() {
 	detectGitIgnores()
 }
 
-// Tools is the list of OpenAI function tools exposed to the model.
+var ToolsNew = []responses.ToolUnionParam{
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Strict:      openai.Bool(false),
+			Name:        string(ToolLs),
+			Description: openai.String("List all files, directories, and sub directories of the current project."),
+			Parameters: shared.FunctionParameters{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolReadFiles),
+			Description: openai.String("Read multiple files in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"filePaths": map[string]any{
+						"type":        "array",
+						"description": "The paths of the files to read",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+				},
+				"required": []string{"filePaths"},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolCreateEntity),
+			Description: openai.String("Create an entity either a directory or a file in the project."),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"entityPath": map[string]any{
+						"type":        "string",
+						"description": "The path of the entity to create",
+					},
+					"entityType": map[string]any{
+						"type":        "string",
+						"enum":        []string{"dir", "file"},
+						"description": "The type of the entity to create",
+					},
+					"entityName": map[string]any{
+						"type":        "string",
+						"description": "The name of the entity to create",
+					},
+					"content": map[string]any{
+						"type":        "string",
+						"description": "The content of the entity to create. Note for directories please return empty string.",
+					},
+				},
+				"required": []string{"entityPath", "entityType", "entityName", "content"},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolRemoveEntity),
+			Description: openai.String("Remove an entity either a directory or a file from the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"entityPath": map[string]any{
+						"type":        "string",
+						"description": "The path of the entity to remove",
+					},
+				},
+				"required": []string{"entityPath"},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolAppendFile),
+			Description: openai.String("Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)"),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"filePath": map[string]any{
+						"type":        "string",
+						"description": "The path of the file to insert into",
+					},
+					"inserts": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"insertAfter": map[string]any{
+									"type":        "number",
+									"description": "The line number after which to insert the content.",
+								},
+								"content": map[string]any{
+									"type":        "string",
+									"description": "The content to insert",
+								},
+							},
+							"required": []string{"insertAfter", "content"},
+						},
+					},
+				},
+				"required": []string{"filePath", "inserts"},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolPatchFile),
+			Description: openai.String("Patch a text file by replacing existing line ranges only. Insertion is not supported here; use 'append_file' for insertions. Must provide the full path (obtainable via 'ls' tool)."),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"filePath": map[string]any{
+						"type":        "string",
+						"description": "The path of the file to patch",
+					},
+					"patches": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"startLine": map[string]any{
+									"type":        "number",
+									"description": "The start line of the range to replace (1-based)",
+								},
+								"endLine": map[string]any{
+									"type":        "number",
+									"description": "The end line of the range to replace (1-based)",
+								},
+								"content": map[string]any{
+									"type":        "string",
+									"description": "Replacement content. Use empty string to delete the specified range.",
+								},
+							},
+							"required": []string{"startLine", "endLine", "content"},
+						},
+					},
+				},
+				"required": []string{"filePath", "patches"},
+			},
+		},
+	},
+	{
+		OfFunction: &responses.FunctionToolParam{
+			Name:        string(ToolGrep),
+			Description: openai.String("Perform a grep action using the unix grep tool."),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"cmd": map[string]any{
+						"type":        "string",
+						"description": "The command to run (e.g., grep -R -n 'pattern' .). No need to provide any exclude patterns.",
+					},
+				},
+				"required": []string{"cmd"},
+			},
+		},
+	},
+}
+
 var Tools = []openai.ChatCompletionToolUnionParam{
 	openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
 		Name:        string(ToolLs),
