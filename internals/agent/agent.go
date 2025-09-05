@@ -24,7 +24,7 @@ const UpdateSig = "update"
 var (
 	OPENAI_API_KEY string = ""
 	OpenAIClient   openai.Client
-	Model          = ModelInfo{openai.ChatModelGPT5Mini, openai.ReasoningEffortLow}
+	Model          = ModelInfo{openai.ChatModelGPT5Mini, openai.ReasoningEffortMedium}
 )
 
 func init() {

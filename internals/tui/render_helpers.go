@@ -56,7 +56,7 @@ func renderHistory(width int) string {
 
 				for _, tc := range msg.OfAssistant.ToolCalls {
 					name := tc.GetFunction().Name
-					args := truncateString(mutedText.Render(tc.GetFunction().Arguments), DefaultTruncateLength)
+					args := mutedText.Render(tc.GetFunction().Arguments)
 					if args != "" {
 						b.WriteString(wrapToWidth(italicText.Render(fmt.Sprintf("- %s args: %s", name, args)), width))
 					} else {
@@ -81,15 +81,13 @@ func renderHistory(width int) string {
 				}
 			}
 
-			truncatedContent := truncateString(toolContent.String(), DefaultTruncateLength)
-			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(truncatedContent), width))
+			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(toolContent.String()), width))
 			b.WriteString("\n")
 
 		case msg.OfFunction != nil:
 			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", msg.OfFunction.Name)))
 			b.WriteString("\n")
-			truncatedContent := truncateString(msg.OfFunction.Content.Value, DefaultTruncateLength)
-			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(truncatedContent), width))
+			b.WriteString(wrapToWidth(mutedText.Italic(true).Render(msg.OfFunction.Content.Value), width))
 			b.WriteString("\n")
 		}
 	}
@@ -127,9 +125,9 @@ func wrapToWidth(s string, width int) string {
 	return strings.Join(newLines, "\n")
 }
 
-func truncateString(s string, maxLength int) string {
-	if len(s) > maxLength {
-		return s[:maxLength] + "..."
-	}
-	return s
-}
+// func truncateString(s string, maxLength int) string {
+// 	if len(s) > maxLength {
+// 		return s[:maxLength] + "..."
+// 	}
+// 	return s
+// }

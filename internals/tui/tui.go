@@ -147,12 +147,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case InfoMsg:
-		m.busy = false
 		m.status = successSt.Render(string(msg))
 		return m, clearMsgTick()
 
 	case ErrMsg:
-		m.busy = false
 		m.status = errorSt.Render(string(msg))
 		return m, clearMsgTick()
 
@@ -162,6 +160,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamChunkMsg:
 		m.busyStatus = "Generating…"
+		m.busy = true
 		isAtBottom := m.vp.AtBottom()
 		// Re-render the full history (agent updates History incrementally)
 		m.vp.SetContent(renderHistory(m.vp.Width))
