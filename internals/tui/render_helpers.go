@@ -13,17 +13,53 @@ func renderHistory(width int) string {
 	var b strings.Builder
 
 	for _, msg := range agent.History {
-		if msg.InputParams != nil {
-			b.WriteString("\n")
-			contentBuf := strings.Builder{}
-			userInputArea := inputBoxSt.Width(width - 2)
-			maxW := userInputArea.GetWidth() - 2 // because of the inner padding of the user message viewer
-			if msg.InputParams.Input.OfString.Valid() {
-				contentBuf.WriteString(wrapToWidth(msg.InputParams.Input.OfString.Value, maxW))
-			}
-			b.WriteString(userInputArea.Padding(0, 1).Render(contentBuf.String()))
-			b.WriteString("\n")
-		}
+    if msg.InputParams != nil {
+        // the user input: prefer explicit message items if present; fallback to OfString
+        userRendered := false
+        for _, item := range msg.InputParams.Input.OfInputItemList {
+            if t := item.GetType(); t != nil && *t == "message" {
+                if role := item.GetRole(); role != nil && *role == "user" {
+                    // Render only the first user message for this turn
+                    content := ""
+                    if item.OfMessage != nil && item.OfMessage.Content.OfString.Valid() {
+                        content = item.OfMessage.Content.OfString.Value
+                    }
+                    if content != "" {
+                        b.WriteString("\n")
+                        contentBuf := strings.Builder{}
+                        userInputArea := inputBoxSt.Width(width - 2)
+                        maxW := userInputArea.GetWidth() - 2
+                        contentBuf.WriteString(wrapToWidth(content, maxW))
+                        b.WriteString(userInputArea.Padding(0, 1).Render(contentBuf.String()))
+                        b.WriteString("\n")
+                        userRendered = true
+                        break
+                    }
+                }
+            }
+        }
+        if !userRendered && msg.InputParams.Input.OfString.Valid() && msg.InputParams.Input.OfString.Value != "" {
+            b.WriteString("\n")
+            contentBuf := strings.Builder{}
+            userInputArea := inputBoxSt.Width(width - 2)
+            maxW := userInputArea.GetWidth() - 2
+            contentBuf.WriteString(wrapToWidth(msg.InputParams.Input.OfString.Value, maxW))
+            b.WriteString(userInputArea.Padding(0, 1).Render(contentBuf.String()))
+            b.WriteString("\n")
+        }
+
+        for _, item := range msg.InputParams.Input.OfInputItemList {
+            if *item.GetType() == "function_call_output" {
+                out := item.OfFunctionCallOutput
+                if out.Output != "" {
+                    b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", out.CallID)))
+                    b.WriteString("\n")
+                    b.WriteString(wrapToWidth(mutedText.Italic(true).Render(out.Output), width))
+                    b.WriteString("\n")
+                }
+            }
+        }
+    }
 
 		if msg.Output != nil {
 			b.WriteString(labelSt.Render("» AI"))
