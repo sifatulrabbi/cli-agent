@@ -1,6 +1,7 @@
 package agent
 
 import (
+    "bufio"
     "bytes"
     "encoding/json"
     "fmt"
@@ -8,6 +9,7 @@ import (
     "log"
     "net/http"
     "os"
+    "strings"
     "time"
 
     "github.com/openai/openai-go/v2"
@@ -144,21 +146,52 @@ func ChatWithLLM(question string) chan string {
         // Chat loop with server and manual tool execution
         const maxIterations = 8
         for iter := 0; iter < maxIterations; iter++ {
-            // Call the Python agent server
-            aiMsgs, err := callServerWithHistory(History)
+            // Prepare placeholder AI message for streaming in the visible history (not sent to server)
+            placeholderIndex := len(History)
+            placeholder := AIMessage{Role: "ai", Output: ""}
+            placeholderRaw, _ := json.Marshal(placeholder)
+            History = append(History, HistoryMessage{Role: "ai", RawJSON: string(placeholderRaw)})
+            sendUpdateSig()
+
+            // Call the Python agent server with streaming first (using history BEFORE placeholder)
+            historyForServer := make([]HistoryMessage, placeholderIndex)
+            copy(historyForServer, History[:placeholderIndex])
+
+            aiMsgs, err := callServerStream(historyForServer, func(text string) {
+                // Append chunk text to the placeholder AI message and re-render
+                cur := History[placeholderIndex].ToAIMessage()
+                cur.Role = "ai"
+                cur.Output += text
+                updatedRaw, _ := json.Marshal(cur)
+                History[placeholderIndex].RawJSON = string(updatedRaw)
+                sendUpdateSig()
+            })
+            if err != nil {
+                // Fallback to non-streaming once if streaming fails
+                log.Println("Stream failed, trying non-streaming:", err)
+                aiMsgs, err = callServerWithHistory(historyForServer)
+            }
             if err != nil {
                 log.Println("Agent server error:", err)
                 // Surface error to UI as AI message
                 ai := AIMessage{Role: "ai", Output: fmt.Sprintf("Error contacting agent server: %v", err)}
                 aiRaw, _ := json.Marshal(ai)
-                History = append(History, HistoryMessage{Role: "ai", RawJSON: string(aiRaw)})
+                // Replace placeholder with error
+                if placeholderIndex < len(History) {
+                    History[placeholderIndex] = HistoryMessage{Role: "ai", RawJSON: string(aiRaw)}
+                } else {
+                    History = append(History, HistoryMessage{Role: "ai", RawJSON: string(aiRaw)})
+                }
                 sendUpdateSig()
                 return
             }
 
-            // Append returned AI messages (usually 1)
-            for _, hm := range aiMsgs {
-                History = append(History, hm)
+            // Replace placeholder with first AI message and append any additional ones
+            if len(aiMsgs) > 0 {
+                History[placeholderIndex] = aiMsgs[0]
+                for i := 1; i < len(aiMsgs); i++ {
+                    History = append(History, aiMsgs[i])
+                }
             }
             sendUpdateSig()
 
@@ -258,4 +291,77 @@ func callServerWithHistory(history []HistoryMessage) ([]HistoryMessage, error) {
         return nil, err
     }
     return cr.Messages, nil
+}
+
+// callServerStream streams partial chunks; returns the final AI HistoryMessage(s)
+func callServerStream(history []HistoryMessage, onChunk func(text string)) ([]HistoryMessage, error) {
+    payload := chatRequest{Messages: history}
+    body, err := json.Marshal(payload)
+    if err != nil {
+        return nil, err
+    }
+
+    url := serverBaseURL() + "/agent/stream"
+    req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+    if err != nil {
+        return nil, err
+    }
+    req.Header.Set("Content-Type", "application/json")
+
+    httpClient := &http.Client{Timeout: 0} // no timeout for stream; rely on server
+    resp, err := httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+
+    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+        data, _ := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(data))
+    }
+
+    defer resp.Body.Close()
+
+    reader := bufio.NewReader(resp.Body)
+    var finals []HistoryMessage
+    for {
+        line, err := reader.ReadString('\n')
+        if err != nil {
+            if err == io.EOF {
+                break
+            }
+            return finals, err
+        }
+        line = strings.TrimSpace(line)
+        if line == "" {
+            continue
+        }
+        if !strings.HasPrefix(line, "data: ") {
+            continue
+        }
+        payload := strings.TrimPrefix(line, "data: ")
+        var evt struct {
+            Type    string          `json:"type"`
+            Text    string          `json:"text"`
+            Message json.RawMessage `json:"message"`
+        }
+        if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+            continue
+        }
+        switch evt.Type {
+        case "chunk":
+            if onChunk != nil {
+                onChunk(evt.Text)
+            }
+            // Signal UI to re-render
+            // sendUpdateSig will be called by outer loop
+        case "final":
+            var hm HistoryMessage
+            // evt.Message is a serialized HistoryMessage
+            if err := json.Unmarshal(evt.Message, &hm); err == nil {
+                finals = append(finals, hm)
+            }
+        }
+    }
+    return finals, nil
 }

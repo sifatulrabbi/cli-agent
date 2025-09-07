@@ -4,6 +4,7 @@ from typing import Any, List
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import (
     AIMessage as LCAIMessage,
@@ -14,6 +15,7 @@ from langchain_core.messages import (
 )
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+import asyncio
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")
@@ -283,3 +285,61 @@ async def agent_chat(body: ChatRequest) -> ChatResponse:
     response: LCAIMessage = await llm.bind_tools(get_tools()).ainvoke(lc_messages)  # type: ignore
     ai_h = _format_ai_for_history(response)
     return ChatResponse(messages=[ai_h])
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/agent/stream")
+async def agent_stream(body: ChatRequest):
+    lc_messages = _history_to_langchain(body.messages)
+
+    async def event_gen():
+        collected_text_parts: list[str] = []
+        final_sent = False
+        try:
+            async for event in llm.bind_tools(get_tools()).astream_events(lc_messages, version="v1"):  # type: ignore
+                et = event.get("event", "")
+                if et == "on_chat_model_stream":
+                    data = event.get("data", {}) or {}
+                    chunk = data.get("chunk")
+                    # 'chunk' can be an object with .content or a dict
+                    content = getattr(chunk, "content", None)
+                    if content is None and isinstance(chunk, dict):
+                        content = chunk.get("content")
+                    text = _extract_text_from_content(content)
+                    if text:
+                        collected_text_parts.append(text)
+                        yield _sse({"type": "chunk", "text": text})
+                elif et == "on_chat_model_end":
+                    data = event.get("data", {}) or {}
+                    output = data.get("output")
+                    ai_msg = output if isinstance(output, LCAIMessage) else None
+                    # Fallback: try to build a minimal AIMessage-like payload
+                    if ai_msg is None:
+                        # synthesize an AI message from collected text
+                        synthesized = LCAIMessage(content="".join(collected_text_parts))
+                        ai_h = _format_ai_for_history(synthesized)
+                    else:
+                        ai_h = _format_ai_for_history(ai_msg)
+                    final_sent = True
+                    yield _sse({"type": "final", "message": ai_h.model_dump()})
+        except Exception as e:
+            # Surface error as a final event so the client can handle gracefully
+            err_ai = LCAIMessage(content=f"Error during stream: {e}")
+            ai_h = _format_ai_for_history(err_ai)
+            final_sent = True
+            yield _sse({"type": "final", "message": ai_h.model_dump()})
+        finally:
+            if not final_sent:
+                # Ensure the client receives at least a final event
+                ai_h = HistoryMessage(role="ai", raw_json=json.dumps({
+                    "role": "ai",
+                    "output": "".join(collected_text_parts),
+                    "reasoning": "",
+                    "tool_calls": [],
+                }, ensure_ascii=False))
+                yield _sse({"type": "final", "message": ai_h.model_dump()})
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
