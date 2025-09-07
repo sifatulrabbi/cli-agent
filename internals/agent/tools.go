@@ -237,6 +237,34 @@ var ToolsNew = []responses.ToolUnionParam{
 	},
 }
 
+// buildToolSpecsForServer converts OpenAI tool schema into a plain JSON form for the Python server
+func buildToolSpecsForServer() []map[string]any {
+	specs := make([]map[string]any, 0, len(ToolsNew))
+	for _, t := range ToolsNew {
+		if t.OfFunction == nil {
+			continue
+		}
+		fn := t.OfFunction
+		fnSpec := map[string]any{
+			"name":       fn.Name,
+			"parameters": fn.Parameters,
+		}
+		if fn.Description.Valid() {
+			fnSpec["description"] = fn.Description.Value
+		}
+		if fn.Strict.Valid() {
+			fnSpec["strict"] = fn.Strict.Value
+		}
+
+		spec := map[string]any{
+			"type":     "function",
+			"function": fnSpec,
+		}
+		specs = append(specs, spec)
+	}
+	return specs
+}
+
 // ToolHandlers maps tool name to an executor that returns a string result.
 var ToolHandlers = map[string]func(argsJSON string) (string, error){
 	string(ToolLs):           handleListProjectFiles,
