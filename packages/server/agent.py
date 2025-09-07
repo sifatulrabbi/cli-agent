@@ -1,10 +1,19 @@
+import json
 import os
-from typing import Any, AsyncGenerator, Sequence, cast
+from typing import Any, List
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage
-from pydantic import BaseModel
+from langchain_core.messages import (
+    AIMessage as LCAIMessage,
+    BaseMessage,
+    HumanMessage as LCHumanMessage,
+    SystemMessage as LCSystemMessage,
+    ToolMessage as LCToolMessage,
+)
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")
@@ -27,19 +36,250 @@ llm = ChatOpenAI(
 )
 
 
-async def invoke_llm_with_tools(
-    messages: Sequence[BaseMessage], tools=[]
-) -> AsyncGenerator[BaseMessage, Any]:
-    stream = llm.bind_tools(tools).astream(messages)
-    acc = None
-    async for chunk in stream:
-        if not acc:
-            acc = chunk
+SYS_PROMPT = (
+    os.getenv(
+        "CLI_AGENT_SYS_PROMPT",
+        "You are a helpful CLI Chat Agent. Now, assist the user with their requests.",
+    )
+    or "You are a helpful CLI Chat Agent. Now, assist the user with their requests."
+)
+
+
+# ----------------------
+# Tools (spec only; not executed here)
+# ----------------------
+
+
+@tool("ls")
+def ls_tool() -> str:
+    """List all files, directories, and sub directories of the current project."""
+    return "(tool is executed by the Go app)"
+
+
+class ReadFilesArgs(BaseModel):
+    filePaths: List[str] = Field(..., description="The paths of the files to read")
+
+
+@tool("read_files", args_schema=ReadFilesArgs)
+def read_files_tool(filePaths: List[str]) -> str:
+    """Read multiple files in the project by full path (use 'ls' first)."""
+    return "(tool is executed by the Go app)"
+
+
+class CreateEntityArgs(BaseModel):
+    entityPath: str
+    entityType: str = Field(..., description="Either 'dir' or 'file'")
+    entityName: str
+    content: str
+
+
+@tool("create_entity", args_schema=CreateEntityArgs)
+def create_entity_tool(
+    entityPath: str, entityType: str, entityName: str, content: str
+) -> str:
+    """Create a directory or a file at the given path with optional content."""
+    return "(tool is executed by the Go app)"
+
+
+class RemoveEntityArgs(BaseModel):
+    entityPath: str
+
+
+@tool("remove_entity", args_schema=RemoveEntityArgs)
+def remove_entity_tool(entityPath: str) -> str:
+    """Remove a directory or file by full path (obtainable via 'ls')."""
+    return "(tool is executed by the Go app)"
+
+
+class AppendInsert(BaseModel):
+    insertAfter: int
+    content: str
+
+
+class AppendFileArgs(BaseModel):
+    filePath: str
+    inserts: List[AppendInsert]
+
+
+@tool("append_file", args_schema=AppendFileArgs)
+def append_file_tool(filePath: str, inserts: List[AppendInsert]) -> str:
+    """Insert content into a text file by line number positions."""
+    return "(tool is executed by the Go app)"
+
+
+class Patch(BaseModel):
+    startLine: int
+    endLine: int
+    content: str
+
+
+class PatchFileArgs(BaseModel):
+    filePath: str
+    patches: List[Patch]
+
+
+@tool("patch_file", args_schema=PatchFileArgs)
+def patch_file_tool(filePath: str, patches: List[Patch]) -> str:
+    """Replace specific line ranges in a text file; no insertions here."""
+    return "(tool is executed by the Go app)"
+
+
+class GrepArgs(BaseModel):
+    cmd: str = Field(..., description="Command e.g., grep -R -n 'pattern' .")
+
+
+@tool("grep", args_schema=GrepArgs)
+def grep_tool(cmd: str) -> str:
+    """Run grep with sensible excludes automatically applied by the Go app."""
+    return "(tool is executed by the Go app)"
+
+
+def get_tools():
+    return [
+        ls_tool,
+        read_files_tool,
+        create_entity_tool,
+        remove_entity_tool,
+        append_file_tool,
+        patch_file_tool,
+        grep_tool,
+    ]
+
+
+# ----------------------
+# History bridging models
+# ----------------------
+
+
+class HistoryMessage(BaseModel):
+    role: str
+    raw_json: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[HistoryMessage]
+
+
+class ChatResponse(BaseModel):
+    messages: List[HistoryMessage]
+
+
+def _extract_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            # Handle both dict-style and object-style chunks
+            if isinstance(item, dict):
+                if item.get("type") == "text" and isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+            else:
+                txt = getattr(item, "text", None)
+                if isinstance(txt, str):
+                    parts.append(txt)
+        return "\n".join([p for p in parts if p])
+    return ""
+
+
+def _history_to_langchain(history: List[HistoryMessage]) -> List[BaseMessage]:
+    lc_messages: List[BaseMessage] = [LCSystemMessage(content=SYS_PROMPT)]
+
+    for hm in history:
+        role = (hm.role or "").lower()
+        try:
+            data = json.loads(hm.raw_json or "{}")
+        except Exception:
+            data = {}
+
+        if role == "human":
+            content = data.get("content") or data.get("output") or ""
+            lc_messages.append(LCHumanMessage(content=content))
+        elif role == "ai":
+            content = data.get("output") or data.get("content") or ""
+            tool_calls = []
+            for tc in data.get("tool_calls", []) or []:
+                # Normalize args to dict
+                args_raw = tc.get("args", {})
+                if isinstance(args_raw, str):
+                    try:
+                        args_raw = json.loads(args_raw)
+                    except Exception:
+                        args_raw = {"input": args_raw}
+                tool_calls.append(
+                    {
+                        "name": tc.get("name", ""),
+                        "args": args_raw,
+                        "id": tc.get("call_id") or tc.get("id") or "",
+                    }
+                )
+            lc_messages.append(LCAIMessage(content=content, tool_calls=tool_calls))
+        elif role == "tool":
+            content = data.get("content") or ""
+            tool_call_id = data.get("call_id") or data.get("tool_call_id") or ""
+            name = data.get("name") or ""
+            lc_messages.append(
+                LCToolMessage(content=content, tool_call_id=tool_call_id, name=name)
+            )
         else:
-            acc = acc + chunk
-        yield cast(BaseMessage, acc)
+            # Unknown role: ignore
+            continue
+    return lc_messages
 
 
-@app.post("/agent/chat")
-async def agent_chat(messages: list[dict]):
-    pass
+def _format_ai_for_history(ai: LCAIMessage) -> HistoryMessage:
+    # Extract textual output
+    output_text = _extract_text_from_content(ai.content)
+
+    # Extract reasoning summary if present in response metadata
+    reasoning_text = ""
+    try:
+        meta = getattr(ai, "response_metadata", {}) or {}
+        # Various providers may return reasoning in different shapes
+        if isinstance(meta, dict):
+            if isinstance(meta.get("reasoning"), dict):
+                reasoning_text = (
+                    meta["reasoning"].get("summary")
+                    or meta["reasoning"].get("text")
+                    or meta["reasoning"].get("content")
+                    or ""
+                )
+    except Exception:
+        reasoning_text = ""
+
+    # Normalize tool calls
+    tool_calls_payload = []
+    for tc in ai.tool_calls or []:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "")
+        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+        call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
+        try:
+            args_str = json.dumps(args, ensure_ascii=False)
+        except Exception:
+            args_str = json.dumps({"input": str(args)}, ensure_ascii=False)
+        tool_calls_payload.append(
+            {
+                "name": name or "",
+                "call_id": call_id or "",
+                "args": args_str,
+            }
+        )
+
+    ai_payload = {
+        "role": "ai",
+        "reasoning": reasoning_text,
+        "output": output_text,
+        "tool_calls": tool_calls_payload,
+    }
+
+    return HistoryMessage(
+        role="ai", raw_json=json.dumps(ai_payload, ensure_ascii=False)
+    )
+
+
+@app.post("/agent/chat", response_model=ChatResponse)
+async def agent_chat(body: ChatRequest) -> ChatResponse:
+    lc_messages = _history_to_langchain(body.messages)
+    response: LCAIMessage = await llm.bind_tools(get_tools()).ainvoke(lc_messages)  # type: ignore
+    ai_h = _format_ai_for_history(response)
+    return ChatResponse(messages=[ai_h])
