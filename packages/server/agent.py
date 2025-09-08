@@ -3,7 +3,7 @@ import os
 from typing import Any, List, cast
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import (
     AIMessage,
@@ -27,9 +27,10 @@ app.add_middleware(
 
 
 OPENAI_API_KEY: Any = os.getenv("OPENAI_API_KEY", "")
-SYS_PROMPT = (
-    """You are a helpful CLI Chat Agent. Now, assist the user with their requests."""
-)
+SYS_PROMPT = """\
+You are a helpful CLI Chat Agent.
+Now, assist the user with their requests.
+"""
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-5-mini",
