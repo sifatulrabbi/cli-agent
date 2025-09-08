@@ -30,7 +30,10 @@ func renderHistory(width int) string {
 			aimsg := msg.ToAIMessage()
 
 			if aimsg.Reasoning != "" {
-				b.WriteString(mutedText.Width(width).Render(wrapLines(aimsg.Reasoning, width)))
+				plainReasoning := strings.ReplaceAll(aimsg.Reasoning, "\n\n", "\n")
+				b.WriteString(mutedText.Width(width).Render(
+					clipTopLines(wrapLines(plainReasoning, width), 4),
+				))
 				b.WriteString("\n")
 			}
 
@@ -104,4 +107,15 @@ func wrapLines(textToRender string, width int) string {
 		}
 	}
 	return strings.Join(newLines, "\n")
+}
+
+func clipTopLines(content string, linesToKeep int) string {
+	lines := strings.Split(content, "\n")
+	l := len(lines)
+	if l <= linesToKeep {
+		return content
+	}
+	return fmt.Sprintf("...%d lines hidden\n%s",
+		l-linesToKeep,
+		strings.Join(lines[l-linesToKeep:], "\n"))
 }
