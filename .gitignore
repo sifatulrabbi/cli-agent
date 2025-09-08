@@ -48,3 +48,4 @@ bin/
 tea-play
 cli-agent
 .ipynb_checkpoints
+.DS_Store

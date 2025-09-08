@@ -43,25 +43,19 @@ func renderHistory(width int) string {
 			}
 
 			for _, tc := range aimsg.ToolCalls {
-				args := mutedText.Render(tc.Args)
-
 				b.WriteString("\n")
-				b.WriteString(wrapLines(italicText.Render("🔧 Using tools:"), width))
+				b.WriteString(wrapLines(italicText.Bold(true).Render("🔧 Using tools:"), width))
 				b.WriteString("\n")
-				if args != "" {
-					b.WriteString(wrapLines(italicText.Render(fmt.Sprintf("- %s args: %s", tc.Name, args)), width))
-				} else {
-					b.WriteString(wrapLines(italicText.Render(fmt.Sprintf("- %s", tc.Name)), width))
-				}
+				b.WriteString(wrapLines(italicText.Render(fmt.Sprintf("  - %s", tc.Name)), width))
 				b.WriteString("\n")
 			}
 		}
 
 		if msg.IsToolMsg() {
 			tmsg := msg.ToToolMessage()
-			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s (%s)", tmsg.Name, tmsg.CallID)))
+			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", tmsg.Name)))
 			b.WriteString("\n")
-			b.WriteString(mutedText.Italic(true).Render(wrapLines(tmsg.Content, width)))
+			b.WriteString(mutedText.Italic(true).Render(clipBottomLines(wrapLines(tmsg.Content, width), 10)))
 			b.WriteString("\n")
 		}
 	}
@@ -118,4 +112,15 @@ func clipTopLines(content string, linesToKeep int) string {
 	return fmt.Sprintf("...%d lines hidden\n%s",
 		l-linesToKeep,
 		strings.Join(lines[l-linesToKeep:], "\n"))
+}
+
+func clipBottomLines(content string, linesToKeep int) string {
+	lines := strings.Split(content, "\n")
+	l := len(lines)
+	if l <= linesToKeep {
+		return content
+	}
+	return fmt.Sprintf("%s\n...%d lines hidden",
+		strings.Join(lines[:linesToKeep], "\n"),
+		l-linesToKeep)
 }
