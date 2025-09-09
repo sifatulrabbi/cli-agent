@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/charmbracelet/glamour"
@@ -86,14 +87,44 @@ func renderHistory(width int) string {
 	return b.String()
 }
 
+// Cached Glamour renderer so we don't re-init on every call.
+var (
+	mdRenderer     *glamour.TermRenderer
+	mdRendererW    int
+	mdRendererOnce sync.Mutex
+)
+
 func styledText(textToRender string, width int) string {
-	r, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-		glamour.WithStylePath("dark"),
-	)
-	out, err := r.Render(textToRender)
-	if err != nil {
+	if width < 1 {
+		width = 30
+	}
+
+	// Lazily (re)create the renderer only when width or env-driven style changes matter.
+	mdRendererOnce.Lock()
+	if mdRenderer == nil || mdRendererW != width {
+		opts := []glamour.TermRendererOption{
+			glamour.WithWordWrap(width),
+			glamour.WithAutoStyle(),
+			glamour.WithEmoji(),
+			glamour.WithStylesFromJSONBytes([]byte(`{"document":{"margin":0}}`)),
+		}
+		r, err := glamour.NewTermRenderer(opts...)
+		if err == nil {
+			mdRenderer = r
+			mdRendererW = width
+		} else {
+			mdRenderer = nil
+			mdRendererW = 0
+		}
+	}
+	mdRendererOnce.Unlock()
+
+	if mdRenderer == nil {
+		return wrapLines(textToRender, width)
+	}
+
+	out, err := mdRenderer.Render(textToRender)
+	if err != nil || out == "" {
 		return wrapLines(textToRender, width)
 	}
 	return out

@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from typing import Any, List, cast
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,11 @@ app.add_middleware(
 
 OPENAI_API_KEY: Any = os.getenv("OPENAI_API_KEY", "")
 SYS_PROMPT = """\
-You are a helpful CLI Chat Agent.
+You are a CLI Agent and a pair programmer.
+Your primary task is to assist the user with their programming tasks.
+That said you are not bound to only doing coding tasks and are also here to help the user plan, learn, process, and develop softwares.
+
+Current date and time: {date_time}
 
 <workflow>
 - Understand the user request and start gathering context if needed.
@@ -122,7 +127,12 @@ def _extract_text_from_content(content: Any) -> str:
 
 def _history_to_langchain(history: List[HistoryMessage]) -> List[BaseMessage]:
     lc_messages: List[BaseMessage] = [
-        SystemMessage(content=SYS_PROMPT.format(todo_list="")),
+        SystemMessage(
+            content=SYS_PROMPT.format(
+                todo_list="",
+                date_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        ),
     ]
 
     for hm in history:
