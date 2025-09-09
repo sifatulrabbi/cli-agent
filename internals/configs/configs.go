@@ -49,11 +49,7 @@ func Prepare() {
 	LogFilePath = utils.Ternary(DevMode, "./tmp/logs/debug.log", "/tmp/cli-agent/debug.log")
 
 	if DevMode {
-		fmt.Printf("Starting CLI-Agent from '%s' in 3", WorkingPath)
-		time.Sleep(1 * time.Second)
-		fmt.Printf(" 2")
-		time.Sleep(1 * time.Second)
-		fmt.Println(" 1")
+		fmt.Printf("Starting CLI-Agent from '%s'", WorkingPath)
 		time.Sleep(1 * time.Second)
 	}
 }
