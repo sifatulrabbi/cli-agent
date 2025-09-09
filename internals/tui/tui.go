@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sifatulrabbi/cli-agent/internals/agent"
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 	"github.com/sifatulrabbi/cli-agent/internals/utils"
 )
 
@@ -85,7 +86,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
 		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 1)
 
-		m.input.Width = max(m.width-ROOT_PADDING_X*4, 1)
+		m.input.Width = max(m.width-ROOT_PADDING_X*2-3*2-2, 1)
 
 		log.Printf("Max width: %d, input width: %d, viewport width: %d\n", m.width, m.input.Width, m.vp.Width)
 		return m, nil
@@ -186,7 +187,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	maxContentWidth := max(m.width-(ROOT_PADDING_X*2)-2, 1)
-	header := titleSt.Render("CLI Agent")
+	header := titleSt.Render("CLI Agent  ")
+	header += mutedText.Render(configs.WorkingPath)
 	busyLine := ""
 	if m.busy {
 		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)

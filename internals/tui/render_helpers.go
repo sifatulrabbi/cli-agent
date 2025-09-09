@@ -30,6 +30,7 @@ func renderHistory(width int) string {
 			aimsg := msg.ToAIMessage()
 
 			if aimsg.Reasoning != "" {
+				b.WriteString("\n")
 				plainReasoning := strings.ReplaceAll(aimsg.Reasoning, "\n\n", "\n")
 				b.WriteString(mutedText.Width(width).Render(
 					clipTopLines(wrapLines(plainReasoning, width), 4),
@@ -44,7 +45,7 @@ func renderHistory(width int) string {
 
 			for _, tc := range aimsg.ToolCalls {
 				b.WriteString("\n")
-				b.WriteString(wrapLines(italicText.Bold(true).Render("🔧 Using tools:"), width))
+				b.WriteString(wrapLines(italicText.Bold(true).Render("🔧 CLI-Agent is using tools:"), width))
 				b.WriteString("\n")
 				b.WriteString(wrapLines(italicText.Render(fmt.Sprintf("  - %s", tc.Name)), width))
 				b.WriteString("\n")
@@ -53,7 +54,7 @@ func renderHistory(width int) string {
 
 		if msg.IsToolMsg() {
 			tmsg := msg.ToToolMessage()
-			b.WriteString(labelSt.Render(fmt.Sprintf("» TOOL: %s", tmsg.Name)))
+			b.WriteString(labelSt.Render(fmt.Sprintf("» %s", tmsg.Name)))
 			b.WriteString("\n")
 			b.WriteString(mutedText.Italic(true).Render(clipBottomLines(wrapLines(tmsg.Content, width), 10)))
 			b.WriteString("\n")

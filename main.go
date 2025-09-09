@@ -4,33 +4,33 @@ Copyright © 2025 Md Sifatul Islam Rabbi <sifatulrabbii@gmail.com>
 package main
 
 import (
+	"fmt"
 	"log"
-	"os"
+	"runtime"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/joho/godotenv"
 
 	"github.com/sifatulrabbi/cli-agent/cmd"
-	"github.com/sifatulrabbi/cli-agent/internals/utils"
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 
 func main() {
-	devMode := true
-
-	err := godotenv.Load()
-	if err != nil {
-		if os.Getenv("OPENAI_API_KEY") != "" {
-			devMode = false
-		} else {
-			log.Fatal("Error loading .env file", err)
-		}
+	if osName := runtime.GOOS; strings.HasPrefix(osName, "windows") {
+		log.Panicln("Platform windows is not supported. Please use within WSL.")
 	}
 
-	f, err := tea.LogToFile(utils.Ternary(devMode, "./tmp/logs/debug.log", "/tmp/cli-agent/debug.log"), "")
+	configs.Prepare()
+
+	f, err := tea.LogToFile(configs.LogFilePath, "")
 	if err != nil {
 		log.Panicln("Failed to open log file:", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println("Failed to properly close the log file.")
+		}
+	}()
 	log.SetOutput(f)
 
 	cmd.Execute()

@@ -6,17 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 
 func TestListProjectFiles(t *testing.T) {
+	configs.Prepare()
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "README.md"), "hello\nworld")
-	mustMkdirAll(t, filepath.Join(projectRootDir, "dir1"))
-	mustWriteFile(t, filepath.Join(projectRootDir, "dir1", "file.txt"), "alpha\nbeta")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "README.md"), "hello\nworld")
+	mustMkdirAll(t, filepath.Join(configs.WorkingPath, "dir1"))
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "dir1", "file.txt"), "alpha\nbeta")
 
-	out, err := handleListProjectFiles("")
+	out, err := handleLs("")
 	if err != nil {
 		t.Fatalf("ls tool error: %v", err)
 	}
@@ -31,8 +34,8 @@ func TestReadFiles(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustMkdirAll(t, projectRootDir+"/newdir")
-	mustWriteFile(t, filepath.Join(projectRootDir, "./newdir", "./README.md"), "hello\nworld")
+	mustMkdirAll(t, configs.WorkingPath+"/newdir")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "./newdir", "./README.md"), "hello\nworld")
 
 	rfArgs := fmt.Sprintf(`{"filePaths":[%q]}`, "./newdir/README.md")
 	out, err := handleReadFiles(rfArgs)
@@ -56,7 +59,7 @@ func TestCreateEntity_Dir(t *testing.T) {
 		t.Fatalf("create_entity dir error: %v", err)
 	}
 	assertContains(t, out, "has been created")
-	assertDirExists(t, filepath.Join(projectRootDir, "newdir"))
+	assertDirExists(t, filepath.Join(configs.WorkingPath, "newdir"))
 }
 
 func TestCreateEntity_File(t *testing.T) {
@@ -70,14 +73,14 @@ func TestCreateEntity_File(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create_entity file error: %v", err)
 	}
-	assertFileExists(t, filepath.Join(projectRootDir, "newdir", "note.txt"))
+	assertFileExists(t, filepath.Join(configs.WorkingPath, "newdir", "note.txt"))
 }
 
 func TestInsertIntoTextFile(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\nsecond")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "newdir", "note.txt"), "first\nsecond")
 
 	args := fmt.Sprintf(`{"filePath":%q,"inserts":[{"insertAfter":1,"content":"inserted"}]}`, "./newdir/note.txt")
 	out, err := handleInsertIntoTextFile(args)
@@ -94,7 +97,7 @@ func TestPatchTextFile(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\ninserted\nsecond")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "newdir", "note.txt"), "first\ninserted\nsecond")
 
 	args := fmt.Sprintf(`{"filePath":%q,"patches":[{"startLine":2,"endLine":2,"content":"REPLACED"}]}`, "./newdir/note.txt")
 	out, err := handlePatchTextFile(args)
@@ -110,7 +113,7 @@ func TestGrep(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "first\ninserted\nsecond")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "newdir", "note.txt"), "first\ninserted\nsecond")
 
 	// Basic grep for a known word
 	args := fmt.Sprintf(`{"cmd":%q}`, "grep -R -n inserted .")
@@ -129,14 +132,14 @@ func TestRemoveEntity_File(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustWriteFile(t, filepath.Join(projectRootDir, "newdir", "note.txt"), "content")
+	mustWriteFile(t, filepath.Join(configs.WorkingPath, "newdir", "note.txt"), "content")
 
 	args := fmt.Sprintf(`{"entityPath":%q}`, "./newdir/note.txt")
 	_, err := handleRemoveEntity(args)
 	if err != nil {
 		t.Fatalf("remove_entity file error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(projectRootDir, "newdir", "note.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(configs.WorkingPath, "newdir", "note.txt")); !os.IsNotExist(err) {
 		t.Fatalf("expected note.txt to be removed, stat err: %v", err)
 	}
 }
@@ -145,14 +148,14 @@ func TestRemoveEntity_Dir(t *testing.T) {
 	cleanup := setupTempProject(t)
 	defer cleanup()
 
-	mustMkdirAll(t, filepath.Join(projectRootDir, "newdir"))
+	mustMkdirAll(t, filepath.Join(configs.WorkingPath, "newdir"))
 
 	args := fmt.Sprintf(`{"entityPath":%q}`, "./newdir")
 	_, err := handleRemoveEntity(args)
 	if err != nil {
 		t.Fatalf("remove_entity dir error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(projectRootDir, "newdir")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(configs.WorkingPath, "newdir")); !os.IsNotExist(err) {
 		t.Fatalf("expected newdir to be removed, stat err: %v", err)
 	}
 }
@@ -163,12 +166,12 @@ func TestRemoveEntity_Dir(t *testing.T) {
 
 func setupTempProject(t *testing.T) func() {
 	t.Helper()
-	projectRootDir = filepath.Join(projectRootDir, "../../tmp/test-tools")
-	if err := os.Mkdir(projectRootDir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", projectRootDir, err)
+	configs.WorkingPath = filepath.Join(configs.WorkingPath, "../../tmp/test-tools")
+	if err := os.Mkdir(configs.WorkingPath, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", configs.WorkingPath, err)
 	}
-	projectRootName = filepath.Base(projectRootDir)
-	return func() { _ = os.RemoveAll(projectRootDir) }
+	projectRootName = filepath.Base(configs.WorkingPath)
+	return func() { _ = os.RemoveAll(configs.WorkingPath) }
 }
 
 func mustMkdirAll(t *testing.T, p string) {

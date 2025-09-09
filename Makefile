@@ -4,5 +4,5 @@ local-build:
 	go build && go install
 
 dev:
-	go build && go install && cli-agent
+	go build && go install && GOENV=dev cli-agent
 

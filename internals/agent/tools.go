@@ -15,6 +15,8 @@ import (
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/responses"
 	"github.com/openai/openai-go/v2/shared"
+
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 
 type ToolName string
@@ -30,7 +32,6 @@ const (
 )
 
 var (
-	projectRootDir  string
 	projectRootName string
 	ignoreDirs      = []string{
 		"\\.venv",
@@ -67,9 +68,6 @@ func init() {
 	if err != nil || cwd == "" {
 		cwd = "/tmp"
 	}
-	projectRootDir = cwd
-	projectRootName = filepath.Base(projectRootDir)
-
 	detectGitIgnores()
 }
 
@@ -267,7 +265,7 @@ func buildToolSpecsForServer() []map[string]any {
 
 // ToolHandlers maps tool name to an executor that returns a string result.
 var ToolHandlers = map[string]func(argsJSON string) (string, error){
-	string(ToolLs):           handleListProjectFiles,
+	string(ToolLs):           handleLs,
 	string(ToolReadFiles):    handleReadFiles,
 	string(ToolCreateEntity): handleCreateEntity,
 	string(ToolRemoveEntity): handleRemoveEntity,
@@ -293,7 +291,7 @@ func buildPathFromRootDir(entryPath string) string {
 	p = strings.TrimPrefix(p, "/")
 	// Convert back to OS-specific separators for joining
 	p = filepath.FromSlash(p)
-	return filepath.Join(projectRootDir, p)
+	return filepath.Join(configs.WorkingPath, p)
 }
 
 func dirIgnored(path string) bool {
@@ -374,8 +372,8 @@ func detectEOL(s string) string {
 // Tool handlers
 // ----------------------
 
-func handleListProjectFiles(_ string) (string, error) {
-	entries, err := traverseDir(projectRootDir)
+func handleLs(_ string) (string, error) {
+	entries, err := traverseDir(configs.WorkingPath)
 	if err != nil {
 		return "", err
 	}
@@ -468,7 +466,7 @@ func handleCreateEntity(argsJSON string) (string, error) {
 		}
 	}
 
-	list, _ := handleListProjectFiles("")
+	list, _ := handleLs("")
 	suffix := "."
 	if args.EntityType != "dir" {
 		suffix = "with the content."
@@ -494,7 +492,7 @@ func handleRemoveEntity(argsJSON string) (string, error) {
 	if err := os.RemoveAll(full); err != nil {
 		return "", err
 	}
-	list, _ := handleListProjectFiles("")
+	list, _ := handleLs("")
 	kind := "file"
 	if info.IsDir() {
 		kind = "directory"
@@ -617,7 +615,7 @@ func handleGrep(argsJSON string) (string, error) {
 		strings.Join(ignoreFiles, ","))
 
 	cmd := exec.Command("/bin/sh", "-c", fullCmd)
-	cmd.Dir = projectRootDir
+	cmd.Dir = configs.WorkingPath
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("Grep error:", err)
@@ -629,7 +627,7 @@ func handleGrep(argsJSON string) (string, error) {
 }
 
 func detectGitIgnores() {
-	entries, _ := traverseDir(projectRootDir)
+	entries, _ := traverseDir(configs.WorkingPath)
 	dedup := make(map[string]struct{}, len(ignoreFiles))
 	for _, v := range ignoreFiles {
 		dedup[v] = struct{}{}
@@ -639,7 +637,7 @@ func detectGitIgnores() {
 			continue
 		}
 
-		fullPath := filepath.Join(projectRootDir, e)
+		fullPath := filepath.Join(configs.WorkingPath, e)
 		data, rErr := os.ReadFile(fullPath)
 		if rErr != nil {
 			continue
