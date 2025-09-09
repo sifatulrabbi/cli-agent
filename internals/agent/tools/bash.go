@@ -29,7 +29,7 @@ func handleBash(argsJSON string) (string, error) {
 
 	// Disallow potentially dangerous shell features outright.
 	// This tool executes without a shell, but we sanitize anyway.
-	forbiddenChars := []string{";", "&", "`", "$", ">", "<", "\n", "\r", "(", ")"}
+	forbiddenChars := []string{";", "`", "$", ">", "<", "\n", "\r", "(", ")"}
 	for _, ch := range forbiddenChars {
 		if strings.Contains(cmdline, ch) {
 			return "", fmt.Errorf("unsupported character %q in command", ch)
