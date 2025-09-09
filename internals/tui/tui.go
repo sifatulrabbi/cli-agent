@@ -46,6 +46,12 @@ type model struct {
 	spin         spinner.Model
 	vp           viewport.Model
 	inputMaxRows int
+
+	// file path suggestions when typing '@'
+	showSuggestions      bool
+	suggestions          []string
+	selectedSuggestionIx int
+	suggestionsOffset    int
 }
 
 func New() model {
@@ -64,14 +70,15 @@ func New() model {
 	sp.Spinner = spinner.Dot
 
 	return model{
-		busy:         false,
-		busyStatus:   "",
-		status:       "",
-		buf:          strings.Builder{},
-		input:        ti,
-		spin:         sp,
-		vp:           vp,
-		inputMaxRows: 10,
+		busy:              false,
+		busyStatus:        "",
+		status:            "",
+		buf:               strings.Builder{},
+		input:             ti,
+		spin:              sp,
+		vp:                vp,
+		inputMaxRows:      10,
+		suggestionsOffset: 0,
 	}
 }
 
@@ -95,7 +102,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			visibleRows = 1
 		}
 		m.input.SetHeight(visibleRows)
-		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
+		suggLines := 0
+		if m.showSuggestions {
+			if l := len(m.suggestions); l > 0 {
+				if l > 10 {
+					suggLines = 10
+				} else {
+					suggLines = l
+				}
+			}
+		}
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
 
 		log.Printf("Max width: %d, viewport width: %d\n", m.width, m.vp.Width)
 		return m, nil
@@ -110,18 +127,116 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.SetValue("")
 			return m, nil
 
-        case "ctrl+j":
-            // Insert a newline at the cursor and resize up to max height.
-            m.input.InsertString("\n")
-            visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-            if visibleRows < 1 {
-                visibleRows = 1
-            }
-            m.input.SetHeight(visibleRows)
-			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
+		case "ctrl+j":
+			// Insert a newline at the cursor and resize up to max height.
+			m.input.InsertString("\n")
+			visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+			if visibleRows < 1 {
+				visibleRows = 1
+			}
+			m.input.SetHeight(visibleRows)
+			suggLines := 0
+			if m.showSuggestions {
+				if l := len(m.suggestions); l > 0 {
+					if l > 10 {
+						suggLines = 10
+					} else {
+						suggLines = l
+					}
+				}
+			}
+			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
 			return m, nil
 
+		case "up":
+			if m.showSuggestions && len(m.suggestions) > 0 {
+				if m.selectedSuggestionIx > 0 {
+					m.selectedSuggestionIx--
+				} else {
+					m.selectedSuggestionIx = len(m.suggestions) - 1
+				}
+				// adjust offset to keep selection visible
+				if m.selectedSuggestionIx < m.suggestionsOffset {
+					m.suggestionsOffset = m.selectedSuggestionIx
+				}
+				return m, nil
+			}
+			// Otherwise let textarea handle up arrow
+
+		case "down":
+			if m.showSuggestions && len(m.suggestions) > 0 {
+				m.selectedSuggestionIx = (m.selectedSuggestionIx + 1) % len(m.suggestions)
+				maxLines := 10
+				if m.selectedSuggestionIx >= m.suggestionsOffset+maxLines {
+					m.suggestionsOffset = m.selectedSuggestionIx - maxLines + 1
+				}
+				return m, nil
+			}
+			// Otherwise let textarea handle down arrow
+
+		case "left":
+			if m.showSuggestions && len(m.suggestions) > 0 {
+				if m.selectedSuggestionIx > 0 {
+					m.selectedSuggestionIx--
+				} else {
+					m.selectedSuggestionIx = len(m.suggestions) - 1
+				}
+				if m.selectedSuggestionIx < m.suggestionsOffset {
+					m.suggestionsOffset = m.selectedSuggestionIx
+				}
+				return m, nil
+			}
+			// Otherwise let textarea handle left arrow
+
+		case "right":
+			if m.showSuggestions && len(m.suggestions) > 0 {
+				m.selectedSuggestionIx = (m.selectedSuggestionIx + 1) % len(m.suggestions)
+				maxLines := 10
+				if m.selectedSuggestionIx >= m.suggestionsOffset+maxLines {
+					m.suggestionsOffset = m.selectedSuggestionIx - maxLines + 1
+				}
+				return m, nil
+			}
+			// Otherwise let textarea handle right arrow
+
 		case "enter":
+			// If suggestions are visible, accept selection instead of submitting
+			if m.showSuggestions && len(m.suggestions) > 0 {
+				frag, ok := extractActiveAtFragment(m.input.Value())
+				if ok {
+					chosen := m.suggestions[m.selectedSuggestionIx]
+					newVal := insertSuggestionIntoInput(m.input.Value(), frag, chosen)
+					m.input.SetValue(newVal)
+					if strings.HasSuffix(chosen, "/") {
+						// Keep browsing into directory: refresh suggestions
+						m.refreshSuggestions()
+					} else {
+						// Hide suggestions after selecting a file
+						m.showSuggestions = false
+						m.suggestions = nil
+						m.selectedSuggestionIx = 0
+						m.suggestionsOffset = 0
+					}
+					// Adjust input/viewport heights after modification
+					visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+					if visibleRows < 1 {
+						visibleRows = 1
+					}
+					m.input.SetHeight(visibleRows)
+					suggLines := 0
+					if m.showSuggestions {
+						if l := len(m.suggestions); l > 0 {
+							if l > 10 {
+								suggLines = 10
+							} else {
+								suggLines = l
+							}
+						}
+					}
+					m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
+					return m, nil
+				}
+			}
 			if m.busy {
 				return m, nil
 			}
@@ -204,13 +319,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var inputCmd, viewportCmd tea.Cmd
 	m.input, inputCmd = m.input.Update(msg)
+	// Refresh file suggestions whenever input changes
+	m.refreshSuggestions()
 	// Keep input height responsive to content changes (cap at 10)
 	visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
 	if visibleRows < 1 {
 		visibleRows = 1
 	}
 	m.input.SetHeight(visibleRows)
-	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
+	suggLines := 0
+	if m.showSuggestions {
+		if l := len(m.suggestions); l > 0 {
+			if l > 10 {
+				suggLines = 10
+			} else {
+				suggLines = l
+			}
+		}
+	}
+	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
 	m.vp, viewportCmd = m.vp.Update(msg)
 	return m, tea.Batch(inputCmd, viewportCmd)
 }
@@ -226,18 +353,23 @@ func (m model) View() string {
 	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
 	controls := helpSt.Render(fmt.Sprintf("Enter: submit • Ctrl+J: new line • /exit: quit • /clear: clear history • Model: %s",
 		agent.Model.String()))
+
+	var lines []string
+	lines = append(lines, header)
+	lines = append(lines, m.vp.View())
+	lines = append(lines, busyLine)
+	lines = append(lines, m.status)
+	lines = append(lines, inputField)
+	if m.showSuggestions && len(m.suggestions) > 0 {
+		lines = append(lines, renderSuggestions(maxContentWidth, m.suggestions, m.selectedSuggestionIx, m.suggestionsOffset))
+	}
+	lines = append(lines, controls)
+
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
 		Width(max(m.width, 1)).
 		Height(max(m.height, 1)).
-		Render(fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s\n",
-			header,
-			m.vp.View(),
-			busyLine,
-			m.status,
-			inputField,
-			controls,
-		))
+		Render(strings.Join(lines, "\n") + "\n")
 	return finalView
 }
 
@@ -273,4 +405,45 @@ func countLines(s string) int {
 		return 1
 	}
 	return strings.Count(s, "\n") + 1
+}
+
+// refreshSuggestions updates the in-model file suggestions based on the last
+// "@path" fragment in the input, only if the fragment is at the end of input.
+func (m *model) refreshSuggestions() {
+	raw := m.input.Value()
+	frag, ok := extractActiveAtFragment(raw)
+	if !ok {
+		m.showSuggestions = false
+		m.suggestions = nil
+		m.selectedSuggestionIx = 0
+		m.suggestionsOffset = 0
+		return
+	}
+
+	// Build suggestions relative to WorkingPath
+	sugg := listPathSuggestions(configs.WorkingPath, frag)
+	if len(sugg) == 0 {
+		m.showSuggestions = false
+		m.suggestions = nil
+		m.selectedSuggestionIx = 0
+		m.suggestionsOffset = 0
+		return
+	}
+	m.showSuggestions = true
+	m.suggestions = sugg
+	if m.selectedSuggestionIx >= len(m.suggestions) {
+		m.selectedSuggestionIx = max(0, len(m.suggestions)-1)
+	}
+	// Clamp offset and keep selection visible
+	maxLines := 10
+	maxOffset := max(0, len(m.suggestions)-maxLines)
+	if m.suggestionsOffset > maxOffset {
+		m.suggestionsOffset = maxOffset
+	}
+	if m.selectedSuggestionIx < m.suggestionsOffset {
+		m.suggestionsOffset = m.selectedSuggestionIx
+	}
+	if m.selectedSuggestionIx >= m.suggestionsOffset+maxLines {
+		m.suggestionsOffset = m.selectedSuggestionIx - maxLines + 1
+	}
 }
