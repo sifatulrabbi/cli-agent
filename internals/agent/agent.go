@@ -13,6 +13,8 @@ import (
 
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/shared"
+
+	"github.com/sifatulrabbi/cli-agent/internals/agent/tools"
 )
 
 type HistoryMessage struct {
@@ -194,7 +196,7 @@ func ChatWithLLM(question string) chan string {
 
 			// Execute tools and append tool messages
 			for _, tc := range aimsg.ToolCalls {
-				handler, ok := ToolHandlers[tc.Name]
+				handler, ok := tools.Handlers[tc.Name]
 				var toolOutput string
 				if !ok {
 					toolOutput = fmt.Sprintf("Tool '%s' not found", tc.Name)
@@ -244,44 +246,9 @@ func serverBaseURL() string {
 	return "http://127.0.0.1:8080"
 }
 
-// func callServerWithHistory(history []HistoryMessage) ([]HistoryMessage, error) {
-// 	payload := chatRequest{Messages: history, Tools: buildToolSpecsForServer()}
-// 	body, err := json.Marshal(payload)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	url := serverBaseURL() + "/agent/chat"
-// 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Content-Type", "application/json")
-// 	// Allow more generous timeout since tools may run between turns
-// 	httpClient := &http.Client{Timeout: 60 * time.Second}
-//
-// 	resp, err := httpClient.Do(req)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer resp.Body.Close()
-//
-// 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-// 		data, _ := io.ReadAll(resp.Body)
-// 		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(data))
-// 	}
-//
-// 	var cr chatResponse
-// 	dec := json.NewDecoder(resp.Body)
-// 	if err := dec.Decode(&cr); err != nil {
-// 		return nil, err
-// 	}
-// 	return cr.Messages, nil
-// }
-
 // callServerStream streams partial chunks; returns the final AI HistoryMessage(s)
 func callServerStream(history []HistoryMessage, onAcc func(hm HistoryMessage)) ([]HistoryMessage, error) {
-	payload := chatRequest{Messages: history, Tools: buildToolSpecsForServer()}
+	payload := chatRequest{Messages: history, Tools: tools.BuildToolSpecsForServer()}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

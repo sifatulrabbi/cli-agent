@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -11,6 +13,7 @@ import (
 	"github.com/charmbracelet/glamour"
 
 	"github.com/sifatulrabbi/cli-agent/internals/agent"
+	"github.com/sifatulrabbi/cli-agent/internals/agent/tools"
 )
 
 const DefaultTruncateLength = 200
@@ -51,7 +54,22 @@ func renderHistory(width int) string {
 				b.WriteString("\n")
 				b.WriteString(wrapLines(italicText.Bold(true).Render("🔧 CLI-Agent is using tools:"), width))
 				b.WriteString("\n")
-				b.WriteString(wrapLines(italicText.Render(fmt.Sprintf("  - %s", tc.Name)), width))
+				toolLine := ""
+				if slices.Contains([]string{tools.ToolBash, tools.ToolGrep}, tc.Name) {
+					var args struct {
+						Cmd string `json:"cmd"`
+					}
+					cmdline := ""
+					if err := json.Unmarshal([]byte(tc.Args), &args); err != nil {
+						cmdline = "Invalid args from the AI!"
+					} else {
+						cmdline = strings.TrimSpace(args.Cmd)
+					}
+					toolLine = fmt.Sprintf("  ↳ %s → %s", tc.Name, cmdline)
+				} else {
+					toolLine = fmt.Sprintf("  ↳ %s", tc.Name)
+				}
+				b.WriteString(wrapLines(italicText.Render(toolLine), width))
 				b.WriteString("\n")
 			}
 		}
