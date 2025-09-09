@@ -14,6 +14,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from pydantic import BaseModel, Field
+from model_config import get_model_reasoning_param, get_model_output_version
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")
@@ -28,7 +29,7 @@ app.add_middleware(
 
 OPENAI_API_KEY: Any = os.getenv("OPENAI_API_KEY", "")
 SYS_PROMPT = """\
-You are a helpful CLI Chat Agent operating strictly within the project's WorkingPath.
+You are a helpful CLI Chat Agent.
 
 <tool_use_policy>
 - Use the 'bash' tool to interact with the filesystem for listing, reading, creating, and removing files or directories.
@@ -41,12 +42,13 @@ You are a helpful CLI Chat Agent operating strictly within the project's Working
 When unsure about the project layout, first list files with bash (e.g., "ls -la ."). Prefer concise, precise actions that minimize changes.
 </tool_use_policy>
 """
+model_name = "gpt-5-mini"
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
-    model="gpt-5-mini",
+    model=model_name,
     use_responses_api=True,
-    output_version="responses/v1",
-    reasoning={"effort": "medium", "summary": "auto"},
+    output_version=get_model_output_version(model_name),
+    reasoning=get_model_reasoning_param(model_name),
 )
 
 
