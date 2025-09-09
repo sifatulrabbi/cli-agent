@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -41,17 +41,19 @@ type model struct {
 	busyStatus string
 	status     string
 
-	buf   strings.Builder
-	input textinput.Model
-	spin  spinner.Model
-	vp    viewport.Model
+	buf          strings.Builder
+	input        textarea.Model
+	spin         spinner.Model
+	vp           viewport.Model
+	inputMaxRows int
 }
 
 func New() model {
-	ti := textinput.New()
-	ti.Prompt = "❯ "
+	ti := textarea.New()
 	ti.Placeholder = getInputPlaceholder()
 	ti.Focus() // focusing by default.
+	ti.SetHeight(1)
+	ti.ShowLineNumbers = false
 
 	vp := viewport.New(1, 1)
 	vp.MouseWheelEnabled = true
@@ -62,13 +64,14 @@ func New() model {
 	sp.Spinner = spinner.Dot
 
 	return model{
-		busy:       false,
-		busyStatus: "",
-		status:     "",
-		buf:        strings.Builder{},
-		input:      ti,
-		spin:       sp,
-		vp:         vp,
+		busy:         false,
+		busyStatus:   "",
+		status:       "",
+		buf:          strings.Builder{},
+		input:        ti,
+		spin:         sp,
+		vp:           vp,
+		inputMaxRows: 10,
 	}
 }
 
@@ -83,12 +86,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
 		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 1)
+		// Input width stays within the bordered box, leave room for padding/border
+		m.input.SetWidth(max(m.width-ROOT_PADDING_X*2-3*2-2, 1))
+		// Adjust viewport height based on current input rows (cap at 10)
+		visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+		if visibleRows < 1 {
+			visibleRows = 1
+		}
+		m.input.SetHeight(visibleRows)
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
 
-		m.input.Width = max(m.width-ROOT_PADDING_X*2-3*2-2, 1)
-
-		log.Printf("Max width: %d, input width: %d, viewport width: %d\n", m.width, m.input.Width, m.vp.Width)
+		log.Printf("Max width: %d, viewport width: %d\n", m.width, m.vp.Width)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -101,19 +110,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.SetValue("")
 			return m, nil
 
+        case "ctrl+j":
+            // Insert a newline at the cursor and resize up to max height.
+            m.input.InsertString("\n")
+            visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+            if visibleRows < 1 {
+                visibleRows = 1
+            }
+            m.input.SetHeight(visibleRows)
+			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
+			return m, nil
+
 		case "enter":
 			if m.busy {
 				return m, nil
 			}
 
-			val := strings.TrimSpace(m.input.Value())
-			if string(val[len(val)-1]) == "\\" {
-				m.input.SetValue(string(val[:len(val)-1]) + "\n")
+			raw := m.input.Value()
+			if strings.TrimSpace(raw) == "" {
 				return m, nil
 			}
-			m.input.Reset()
+			// Clear input, reset height to 1
+			m.input.SetValue("")
+			m.input.SetHeight(1)
+			// Recompute viewport height after clearing input
+			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
 
-			switch val {
+			switch strings.TrimSpace(raw) {
 			case "/exit":
 				return m, tea.Quit
 			case "/clear":
@@ -128,7 +151,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.busy = true
-			m.ch = agent.ChatWithLLM(val)
+			m.ch = agent.ChatWithLLM(raw)
 			m.busyStatus = "Processing…"
 			m.vp.SetContent(renderHistory(m.vp.Width))
 			m.vp.GotoBottom()
@@ -181,6 +204,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var inputCmd, viewportCmd tea.Cmd
 	m.input, inputCmd = m.input.Update(msg)
+	// Keep input height responsive to content changes (cap at 10)
+	visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+	m.input.SetHeight(visibleRows)
+	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
 	m.vp, viewportCmd = m.vp.Update(msg)
 	return m, tea.Batch(inputCmd, viewportCmd)
 }
@@ -194,7 +224,7 @@ func (m model) View() string {
 		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
 	}
 	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
-	controls := helpSt.Render(fmt.Sprintf("Enter: submit  •  /exit: quit  •  /clear: clear history  •  Linebreaks are not supported yet  •  Model: %s",
+	controls := helpSt.Render(fmt.Sprintf("Enter: submit • Ctrl+J: new line • /exit: quit • /clear: clear history • Model: %s",
 		agent.Model.String()))
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
@@ -236,4 +266,11 @@ func StartProgram() {
 		log.Println("Error:", err)
 		os.Exit(1)
 	}
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 1
+	}
+	return strings.Count(s, "\n") + 1
 }
