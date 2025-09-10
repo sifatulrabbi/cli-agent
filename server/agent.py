@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime
 from typing import Any, List, cast
 from fastapi import FastAPI
@@ -14,8 +13,10 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from model_config import get_model_reasoning_param, get_model_output_version
+from configs import OPENAI_API_KEY
+from tools.tools import append_file_tool, bash_tool, grep_tool, patch_file_tool
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")
@@ -28,7 +29,6 @@ app.add_middleware(
 )
 
 
-OPENAI_API_KEY: Any = os.getenv("OPENAI_API_KEY", "")
 SYS_PROMPT = """\
 You are a CLI Agent and a pair programmer.
 Your primary task is to assist the user with their programming tasks.
@@ -86,6 +86,7 @@ llm = ChatOpenAI(
     output_version=get_model_output_version(model_name),
     reasoning=get_model_reasoning_param(model_name),
 )
+tools_available = [bash_tool, grep_tool, append_file_tool, patch_file_tool]
 
 
 # ----------------------
@@ -99,8 +100,8 @@ class HistoryMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    working_path: str
     messages: List[HistoryMessage]
-    tools: List[dict] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -125,7 +126,9 @@ def _extract_text_from_content(content: Any) -> str:
     return ""
 
 
-def _history_to_langchain(history: List[HistoryMessage]) -> List[BaseMessage]:
+def _history_to_langchain(
+    history: List[HistoryMessage], working_path: str
+) -> List[BaseMessage]:
     lc_messages: List[BaseMessage] = [
         SystemMessage(
             content=SYS_PROMPT.format(
@@ -247,8 +250,9 @@ def _format_ai_for_history(ai: AIMessage) -> HistoryMessage:
 
 @app.post("/agent/chat", response_model=ChatResponse)
 async def agent_chat(body: ChatRequest) -> ChatResponse:
-    lc_messages = _history_to_langchain(body.messages)
-    response: AIMessage = await llm.bind(tools=body.tools).ainvoke(lc_messages)  # type: ignore
+    lc_messages = _history_to_langchain(body.messages, body.working_path)
+    # Use LangChain tool objects via bind_tools instead of passing raw dicts
+    response: AIMessage = await llm.bind_tools(tools_available).ainvoke(lc_messages)  # type: ignore
     ai_h = _format_ai_for_history(response)
     return ChatResponse(messages=[ai_h])
 
@@ -259,13 +263,13 @@ def _sse(data: dict) -> str:
 
 @app.post("/agent/stream")
 async def agent_stream(body: ChatRequest):
-    lc_messages = _history_to_langchain(body.messages)
+    lc_messages = _history_to_langchain(body.messages, body.working_path)
 
     async def event_gen():
         final_sent = False
         acc = None
         try:
-            async for chunk in llm.bind(tools=body.tools).astream(lc_messages):
+            async for chunk in llm.bind_tools(tools_available).astream(lc_messages):
                 acc = acc + chunk if acc else chunk
                 delta_ai = _format_ai_for_history(cast(AIMessageChunk, acc))
                 yield _sse({"type": "acc", "message": delta_ai.model_dump()})
@@ -275,6 +279,8 @@ async def agent_stream(body: ChatRequest):
             yield _sse({"type": "final", "message": final_h.model_dump()})
 
         except Exception as e:
+            print("Error during streaming")
+            print(e)
             err_ai = AIMessage(content=f"Error during stream: {e}")
             ai_h = _format_ai_for_history(err_ai)
             final_sent = True

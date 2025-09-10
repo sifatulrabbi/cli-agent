@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	WorkingPath  string = ""
-	OpenaiAPIKey string = ""
-	LogFilePath  string = ""
-	DevMode      bool   = true
+	WorkingPath      string = ""
+	OpenaiAPIKey     string = ""
+	OpenRouterAPIKey string = ""
+	LogFilePath      string = ""
+	DevMode          bool   = true
 )
 
 func Prepare() {
@@ -46,10 +47,11 @@ func Prepare() {
 	}
 
 	OpenaiAPIKey = os.Getenv("OPENAI_API_KEY")
+	OpenRouterAPIKey = os.Getenv("OPENROUTER_API_KEY")
 	LogFilePath = utils.Ternary(DevMode, "./tmp/logs/debug.log", "/tmp/cli-agent/debug.log")
 
 	if DevMode {
-		fmt.Printf("Starting CLI-Agent from '%s'", WorkingPath)
+		fmt.Printf("Starting CLI-Agent from '%s' | logs file '%s'", WorkingPath, LogFilePath)
 		time.Sleep(1 * time.Second)
 	}
 }

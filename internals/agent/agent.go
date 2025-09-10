@@ -15,6 +15,7 @@ import (
 	"github.com/openai/openai-go/v2/shared"
 
 	"github.com/sifatulrabbi/cli-agent/internals/agent/tools"
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 
 type HistoryMessage struct {
@@ -231,8 +232,9 @@ func ChatWithLLM(question string) chan string {
 // ----------------------
 
 type chatRequest struct {
-	Messages []HistoryMessage `json:"messages"`
-	Tools    []map[string]any `json:"tools"`
+	Messages    []HistoryMessage `json:"messages"`
+	Tools       []map[string]any `json:"tools"`
+	WorkingPath string           `json:"working_path"`
 }
 
 type chatResponse struct {
@@ -248,7 +250,10 @@ func serverBaseURL() string {
 
 // callServerStream streams partial chunks; returns the final AI HistoryMessage(s)
 func callServerStream(history []HistoryMessage, onAcc func(hm HistoryMessage)) ([]HistoryMessage, error) {
-	payload := chatRequest{Messages: history, Tools: tools.BuildToolSpecsForServer()}
+	payload := chatRequest{
+		Messages:    history,
+		WorkingPath: configs.WorkingPath,
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -260,6 +265,8 @@ func callServerStream(history []HistoryMessage, onAcc func(hm HistoryMessage)) (
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-OpenAI-API-Key", configs.OpenaiAPIKey)
+	req.Header.Set("X-OpenRouter-API-Key", configs.OpenaiAPIKey)
 
 	httpClient := &http.Client{Timeout: 0} // no timeout for stream; rely on server
 	resp, err := httpClient.Do(req)
