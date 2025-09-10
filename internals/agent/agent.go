@@ -16,6 +16,7 @@ import (
 
 	"github.com/sifatulrabbi/cli-agent/internals/agent/tools"
 	"github.com/sifatulrabbi/cli-agent/internals/configs"
+	"github.com/sifatulrabbi/cli-agent/internals/utils"
 )
 
 type HistoryMessage struct {
@@ -227,18 +228,35 @@ func ChatWithLLM(question string) chan string {
 	return ch
 }
 
+func GetFormattedTodoList() string {
+	formatted := ""
+	c, err := os.ReadFile(configs.TodosFile)
+	if err != nil {
+		log.Println("ERROR: reading todo list file.", err)
+		return formatted
+	}
+	todoList := []tools.TodoItem{}
+	if err = json.Unmarshal(c, &todoList); err != nil {
+		log.Println("ERROR: Unmarshaling todo list.", err)
+		return formatted
+	}
+	if len(todoList) < 1 {
+		return formatted
+	}
+	for _, todo := range todoList {
+		formatted += fmt.Sprintf("%s %d. %s\n", utils.Ternary(todo.Done, "[x]", "[ ]"), todo.Id, todo.Task)
+	}
+	return formatted
+}
+
 // ----------------------
 // Server interaction
 // ----------------------
 
 type chatRequest struct {
 	Messages    []HistoryMessage `json:"messages"`
-	Tools       []map[string]any `json:"tools"`
 	WorkingPath string           `json:"working_path"`
-}
-
-type chatResponse struct {
-	Messages []HistoryMessage `json:"messages"`
+	Todos       string           `json:"todos"`
 }
 
 func serverBaseURL() string {
@@ -250,9 +268,15 @@ func serverBaseURL() string {
 
 // callServerStream streams partial chunks; returns the final AI HistoryMessage(s)
 func callServerStream(history []HistoryMessage, onAcc func(hm HistoryMessage)) ([]HistoryMessage, error) {
+	todos := GetFormattedTodoList()
+	if todos != "" {
+		todos = "<current_todo_list>\n" + todos + "</current_todo_list>"
+	}
+
 	payload := chatRequest{
 		Messages:    history,
 		WorkingPath: configs.WorkingPath,
+		Todos:       todos,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

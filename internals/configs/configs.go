@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -17,6 +18,7 @@ var (
 	OpenaiAPIKey     string = ""
 	OpenRouterAPIKey string = ""
 	LogFilePath      string = ""
+	TodosFile        string = "/tmp/cli-agent/todos"
 	DevMode          bool   = true
 )
 
@@ -50,8 +52,26 @@ func Prepare() {
 	OpenRouterAPIKey = os.Getenv("OPENROUTER_API_KEY")
 	LogFilePath = utils.Ternary(DevMode, "./tmp/logs/debug.log", "/tmp/cli-agent/debug.log")
 
+	// Ensure the todo list file exists
+	if _, err = os.ReadDir(TodosFile); os.IsNotExist(err) {
+		if err = os.MkdirAll(TodosFile, 0o755); err != nil {
+			log.Fatalln("ERROR: Unable to prepare the directory '/tmp/cli-agent/todos' for dev setup.")
+		}
+	}
+	TodosFile = filepath.Join(TodosFile,
+		strings.ReplaceAll(
+			strings.ReplaceAll(WorkingPath, "/", "-"),
+			".", "-",
+		)+".json")
+	if _, err := os.ReadFile(TodosFile); os.IsNotExist(err) {
+		err = os.WriteFile(TodosFile, []byte("[]"), 0o644)
+		if err != nil {
+			log.Fatalln("Unable to create the todo's file:", err)
+		}
+	}
+
 	if DevMode {
-		fmt.Printf("Starting CLI-Agent from '%s' | logs file '%s'", WorkingPath, LogFilePath)
+		fmt.Printf("Starting CLI-Agent from '%s' | logs file '%s' | todo file '%s'", WorkingPath, LogFilePath, TodosFile)
 		time.Sleep(1 * time.Second)
 	}
 }

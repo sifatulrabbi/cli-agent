@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sifatulrabbi/cli-agent/internals/agent"
 	"github.com/sifatulrabbi/cli-agent/internals/agent/tools"
@@ -77,9 +78,15 @@ func renderHistory(width int) string {
 
 		if msg.IsToolMsg() {
 			tmsg := msg.ToToolMessage()
-			b.WriteString(labelSt.Render(fmt.Sprintf("» %s", tmsg.Name)))
+			b.WriteString(labelSt.Render(fmt.Sprintf("  » %s", tmsg.Name)))
 			b.WriteString("\n")
-			b.WriteString(mutedText.Italic(true).Render(clipBottomLines(wrapLines(tmsg.Content, width), 10)))
+			if strings.Contains(tmsg.Name, "todo") {
+				todoList := agent.GetFormattedTodoList()
+				// todoList = strings.Replace("<current_todo_list>")
+				b.WriteString(lipgloss.NewStyle().Bold(true).Padding(2).Render(wrapLines(todoList, width-2*2)))
+			} else {
+				b.WriteString(mutedText.Italic(true).PaddingLeft(2).Render(clipBottomLines(wrapLines(tmsg.Content, width-2), 10)))
+			}
 			b.WriteString("\n")
 		}
 	}

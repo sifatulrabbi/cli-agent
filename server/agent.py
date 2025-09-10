@@ -16,7 +16,15 @@ from langchain_core.messages import (
 from pydantic import BaseModel
 from model_config import get_model_reasoning_param, get_model_output_version
 from configs import OPENAI_API_KEY
-from tools.tools import append_file_tool, bash_tool, grep_tool, patch_file_tool
+from tools.tools import (
+    append_file_tool,
+    bash_tool,
+    grep_tool,
+    patch_file_tool,
+    add_todo_tool,
+    mark_todo_as_done_tool,
+)
+from prompt import SYS_PROMPT
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")
@@ -28,56 +36,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-SYS_PROMPT = """\
-You are a CLI Agent and a pair programmer.
-Your primary task is to assist the user with their programming tasks.
-That said you are not bound to only doing coding tasks and are also here to help the user plan, learn, process, and develop softwares.
-
-Current date and time: {date_time}
-
-<workflow>
-- Understand the user request and start gathering context if needed.
-- Break down the task into smaller steps then perform them in loop using the available tools as much as needed.
-- After finishing up the given tasks describe the user what you did in a markdown formatted text.
-</workflow>
-
-<tool_use_policy>
-- Use the 'bash' tool to interact with the filesystem for listing, reading, creating, and removing files or directories.
-  - Always stay inside WorkingPath; use relative paths (e.g., ./ or subpaths) and never traverse outside (no ../).
-  - Keep bash invocations to a single command without pipes, redirects, subshells, or backgrounding.
-  - For performing any grep make sure to only use the exclusive 'grep' tool.
-- For any content edits inside files (inserting or replacing text), do not use 'bash'. Use the 'append_file' and 'patch_file' tools.
-  - To create a file with initial content: first create it via bash (e.g., touch ./path/to/file), then add content via 'append_file'.
-
-When unsure about the project layout, first list files with bash (e.g., "ls -la ."). Prefer concise, precise actions that minimize changes.
-</tool_use_policy>
-
-<tool_preambles>
-- Describe to the user what you are about to do and the reason for using the tools briefly.
-</tool_preambles>
-
-<parallelize_tool_calls>
-- Whenever possible prioritize parallelizing tool calls using the 'multi_tool_use.parallel' tool.
-</parallelize_tool_calls>
-
-<context_gathering>
-Goal: Develop deep understanding of the code base to perform the tasks.
-Method:
-- Extensively use the grep tool and bash tool to figure out the codebase.
-- And collect enough context for completing the user requested tasks.
-Loop:
-- Always do extensive planning → parallelize tool calls when possible → analyze plan next → perform actions.
-- Stop early when you are sure you have gathered enough context for the given task.
-</context_gathering>
-
-<persistence>
-- You are an agent an you must keep looping over and perform tool calls unless you are absolutely sure you have completed the given task.
-- Follow thru the task and make assumptions instead of stopping and asking the user for feedbacks.
-</persistence>
-
-{todo_list}
-""".strip()
 model_name = "gpt-5-mini"
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
@@ -86,7 +44,14 @@ llm = ChatOpenAI(
     output_version=get_model_output_version(model_name),
     reasoning=get_model_reasoning_param(model_name),
 )
-tools_available = [bash_tool, grep_tool, append_file_tool, patch_file_tool]
+tools_available = [
+    append_file_tool,
+    bash_tool,
+    grep_tool,
+    patch_file_tool,
+    add_todo_tool,
+    mark_todo_as_done_tool,
+]
 
 
 # ----------------------
@@ -100,8 +65,9 @@ class HistoryMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    working_path: str
     messages: List[HistoryMessage]
+    todos: str
+    working_path: str
 
 
 class ChatResponse(BaseModel):
@@ -127,12 +93,12 @@ def _extract_text_from_content(content: Any) -> str:
 
 
 def _history_to_langchain(
-    history: List[HistoryMessage], working_path: str
+    history: List[HistoryMessage], todos: str
 ) -> List[BaseMessage]:
     lc_messages: List[BaseMessage] = [
         SystemMessage(
             content=SYS_PROMPT.format(
-                todo_list="",
+                todo_list=todos,
                 date_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
         ),
@@ -250,7 +216,7 @@ def _format_ai_for_history(ai: AIMessage) -> HistoryMessage:
 
 @app.post("/agent/chat", response_model=ChatResponse)
 async def agent_chat(body: ChatRequest) -> ChatResponse:
-    lc_messages = _history_to_langchain(body.messages, body.working_path)
+    lc_messages = _history_to_langchain(body.messages, body.todos)
     # Use LangChain tool objects via bind_tools instead of passing raw dicts
     response: AIMessage = await llm.bind_tools(tools_available).ainvoke(lc_messages)  # type: ignore
     ai_h = _format_ai_for_history(response)
@@ -263,7 +229,7 @@ def _sse(data: dict) -> str:
 
 @app.post("/agent/stream")
 async def agent_stream(body: ChatRequest):
-    lc_messages = _history_to_langchain(body.messages, body.working_path)
+    lc_messages = _history_to_langchain(body.messages, body.todos)
 
     async def event_gen():
         final_sent = False

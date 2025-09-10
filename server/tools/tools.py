@@ -93,3 +93,37 @@ class BashArgs(BaseModel):
 )
 def bash_tool():
     return
+
+
+class AddTodosArg(BaseModel):
+    todos: list[str] = Field(
+        ..., description="List of tasks that needs to be performed. Explain in detail."
+    )
+
+
+@tool(
+    "add_todo",
+    args_schema=AddTodosArg,
+    description=(
+        "Create a list of tasks that needs to be performed for a given request. "
+        "Do not return the same task twice and only return new tasks that you want to add."
+    ),
+)
+def add_todo_tool():
+    return
+
+
+class MarkTodoAsDoneArg(BaseModel):
+    ids: list[int] = Field(..., description="Ids of the todos to mark as done.")
+
+
+@tool(
+    "mark_todo_as_done",
+    args_schema=MarkTodoAsDoneArg,
+    description=(
+        "Use this tool to mark a todo as done. "
+        "Only provide the ids of the todo that you want to mark as done."
+    ),
+)
+def mark_todo_as_done_tool():
+    return
