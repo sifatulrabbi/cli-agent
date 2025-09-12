@@ -52,6 +52,7 @@ func handleBash(argsJSON string) (string, error) {
 		"uniq": true, "stat": true, "readlink": true, "basename": true, "dirname": true,
 		"echo": true, "printf": true, "mkdir": true, "touch": true, "mv": true, "rm": true,
 		"rmdir": true, "python3": true, "go": true, "node": true, "npm": true, "pip": true,
+		"pnpm": true, "bun": true,
 	}
 	if !allowed[cmdName] {
 		return "", fmt.Errorf("command %q is not allowed", cmdName)

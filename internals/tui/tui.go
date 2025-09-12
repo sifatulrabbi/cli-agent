@@ -112,7 +112,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
+		todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 
 		log.Printf("Max width: %d, viewport width: %d\n", m.width, m.vp.Width)
 		return m, nil
@@ -145,7 +146,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
+			todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 			return m, nil
 
 		case "up":
@@ -233,7 +235,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
+					todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+					m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 					return m, nil
 				}
 			}
@@ -249,7 +252,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.SetValue("")
 			m.input.SetHeight(1)
 			// Recompute viewport height after clearing input
-			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
+			todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - todoLines
 
 			switch strings.TrimSpace(raw) {
 			case "/exit":
@@ -303,6 +307,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if isAtBottom {
 			m.vp.GotoBottom()
 		}
+		// Update viewport height in case todos changed via tool calls
+		visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+		if visibleRows < 1 {
+			visibleRows = 1
+		}
+		suggLines := 0
+		if m.showSuggestions {
+			if l := len(m.suggestions); l > 0 {
+				if l > 10 {
+					suggLines = 10
+				} else {
+					suggLines = l
+				}
+			}
+		}
+		todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 		return m, m.waitForChunk()
 
 	case streamDoneMsg:
@@ -314,6 +335,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.busy = false
 		m.busyStatus = ""
+		// Final adjust in case tools modified todo list
+		visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
+		if visibleRows < 1 {
+			visibleRows = 1
+		}
+		suggLines := 0
+		if m.showSuggestions {
+			if l := len(m.suggestions); l > 0 {
+				if l > 10 {
+					suggLines = 10
+				} else {
+					suggLines = l
+				}
+			}
+		}
+		todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 		return m, func() tea.Msg { return InfoMsg("Successfully generated reply from the LLM!") }
 	}
 
@@ -337,7 +375,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines
+	todoLines := currentTodoLines(max(m.width-(ROOT_PADDING_X*2)-2, 1))
+	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1) - suggLines - todoLines
 	m.vp, viewportCmd = m.vp.Update(msg)
 	return m, tea.Batch(inputCmd, viewportCmd)
 }
@@ -359,6 +398,10 @@ func (m model) View() string {
 	lines = append(lines, m.vp.View())
 	lines = append(lines, busyLine)
 	lines = append(lines, m.status)
+	// Render todo list (if any) above the input field
+	if todo := renderTodoPanel(maxContentWidth); todo != "" {
+		lines = append(lines, todo)
+	}
 	lines = append(lines, inputField)
 	if m.showSuggestions && len(m.suggestions) > 0 {
 		lines = append(lines, renderSuggestions(maxContentWidth, m.suggestions, m.selectedSuggestionIx, m.suggestionsOffset))
@@ -405,6 +448,31 @@ func countLines(s string) int {
 		return 1
 	}
 	return strings.Count(s, "\n") + 1
+}
+
+// currentTodoLines returns how many visual lines the todo panel will take
+// for the given content width, so we can subtract it from the viewport height.
+func currentTodoLines(width int) int {
+	if width < 1 {
+		return 0
+	}
+	todo := agent.GetFormattedTodoList()
+	if strings.TrimSpace(todo) == "" {
+		return 0
+	}
+	body := wrapLines(todo, width)
+	bodyLines := countLines(body)
+	return bodyLines
+}
+
+// renderTodoPanel renders the todo list above the input field when non-empty.
+func renderTodoPanel(width int) string {
+	todo := agent.GetFormattedTodoList()
+	if strings.TrimSpace(todo) == "" {
+		return ""
+	}
+	body := wrapLines(todo, width)
+	return body
 }
 
 // refreshSuggestions updates the in-model file suggestions based on the last

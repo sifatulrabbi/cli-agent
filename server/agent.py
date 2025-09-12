@@ -36,7 +36,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model_name = "gpt-5-mini"
+# model_name = "gpt-5-mini"
+model_name = "gpt-4.1-mini"
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model=model_name,

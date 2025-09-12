@@ -48,7 +48,7 @@ func handleAddTodo(argsJSON string) (string, error) {
 		return "Successfully updated the todo list.", nil
 	}
 	todoList := getExistingTodoContent()
-	for i, task := range args.Todos {
+	for _, task := range args.Todos {
 		existingTodo := false
 		for _, t := range todoList {
 			if strings.TrimSpace(t.Task) == strings.TrimSpace(task) {
@@ -59,7 +59,7 @@ func handleAddTodo(argsJSON string) (string, error) {
 		if existingTodo {
 			continue
 		}
-		todoList = append(todoList, TodoItem{Id: len(todoList) + i + 1, Task: task, Done: false})
+		todoList = append(todoList, TodoItem{Id: len(todoList) + 1, Task: task, Done: false})
 	}
 	saveTodoList(todoList)
 	return "Successfully updated the todo list.", nil

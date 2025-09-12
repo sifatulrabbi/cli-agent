@@ -58,20 +58,15 @@ func Prepare() {
 			log.Fatalln("ERROR: Unable to prepare the directory '/tmp/cli-agent/todos' for dev setup.")
 		}
 	}
-	TodosFile = filepath.Join(TodosFile,
-		strings.ReplaceAll(
-			strings.ReplaceAll(WorkingPath, "/", "-"),
-			".", "-",
-		)+".json")
-	if _, err := os.ReadFile(TodosFile); os.IsNotExist(err) {
-		err = os.WriteFile(TodosFile, []byte("[]"), 0o644)
-		if err != nil {
-			log.Fatalln("Unable to create the todo's file:", err)
-		}
+	TodosFile = filepath.Join(TodosFile, strings.ReplaceAll(strings.ReplaceAll(WorkingPath, "/", "-"), ".", "-")+".json")
+	err = os.WriteFile(TodosFile, []byte("[]"), 0o644)
+	if err != nil {
+		log.Fatalln("Unable to create the todo's file:", err)
 	}
 
 	if DevMode {
-		fmt.Printf("Starting CLI-Agent from '%s' | logs file '%s' | todo file '%s'", WorkingPath, LogFilePath, TodosFile)
+		fmt.Printf("Starting CLI-Agent from '%s' | logs file '%s' | todo file '%s'",
+			WorkingPath, LogFilePath, TodosFile)
 		time.Sleep(1 * time.Second)
 	}
 }
