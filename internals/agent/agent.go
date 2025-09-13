@@ -103,18 +103,44 @@ const (
 )
 
 var (
-	History = []HistoryMessage{}
-	Model   = ModelInfo{openai.ChatModelGPT5Nano, openai.ReasoningEffortLow}
+    History = []HistoryMessage{}
+    Model   = ModelInfo{openai.ChatModelGPT5Nano, openai.ReasoningEffortLow}
 )
 
+// ApprovalRequest is sent by the agent to the UI to request
+// confirmation before executing a potentially destructive action.
+type ApprovalRequest struct {
+    Tool string `json:"tool"`
+    Args string `json:"args"`
+}
+
+// approvalDecisionCh is used by the UI to return an approval decision
+// to the agent loop. true = approved, false = rejected.
+var approvalDecisionCh = make(chan bool)
+
+// SendApprovalDecision is called by the UI/TUI to approve or reject
+// the currently pending approval request.
+func SendApprovalDecision(approve bool) {
+    approvalDecisionCh <- approve
+}
+
 func ChatWithLLM(question string) chan string {
-	ch := make(chan string, 1024)
-	sendUpdateSig := func() {
-		select {
-		case ch <- UpdateSig:
-		default:
-		}
-	}
+    ch := make(chan string, 1024)
+    sendUpdateSig := func() {
+        select {
+        case ch <- UpdateSig:
+        default:
+        }
+    }
+
+    // Helper to send an approval request message to the TUI.
+    // The TUI recognizes the special prefix and parses the JSON payload.
+    sendApprovalReq := func(toolName string, args string) {
+        // Always deliver approval requests; do not drop.
+        req := ApprovalRequest{Tool: toolName, Args: args}
+        b, _ := json.Marshal(req)
+        ch <- "APPROVAL_REQUEST " + string(b)
+    }
 
 	sendUpdateSig()
 
@@ -196,20 +222,43 @@ func ChatWithLLM(question string) chan string {
 				return
 			}
 
-			// Execute tools and append tool messages
-			for _, tc := range aimsg.ToolCalls {
-				handler, ok := tools.Handlers[tc.Name]
-				var toolOutput string
-				if !ok {
-					toolOutput = fmt.Sprintf("Tool '%s' not found", tc.Name)
-				} else {
-					out, err := handler(tc.Args)
-					if err != nil {
-						toolOutput = fmt.Sprintf("Error executing tool '%s': %v", tc.Name, err)
-					} else {
-						toolOutput = out
-					}
-				}
+            // Execute tools and append tool messages
+            for _, tc := range aimsg.ToolCalls {
+                handler, ok := tools.Handlers[tc.Name]
+                var toolOutput string
+                if !ok {
+                    toolOutput = fmt.Sprintf("Tool '%s' not found", tc.Name)
+                } else {
+                    // Before executing, check if this tool requires user approval
+                    if requiresApproval(tc.Name) {
+                        // Notify UI and wait for decision
+                        sendApprovalReq(tc.Name, tc.Args)
+                        // Block until UI responds
+                        approved := <-approvalDecisionCh
+                        if !approved {
+                            toolOutput = "Action rejected by user."
+                            // Add a synthetic tool message and continue to next tool
+                            tmsg := ToolMessage{
+                                Role:    "tool",
+                                Name:    tc.Name,
+                                CallID:  tc.CallID,
+                                Args:    tc.Args,
+                                Content: toolOutput,
+                            }
+                            tRaw, _ := json.Marshal(tmsg)
+                            History = append(History, HistoryMessage{Role: "tool", RawJSON: string(tRaw)})
+                            sendUpdateSig()
+                            continue
+                        }
+                    }
+
+                    out, err := handler(tc.Args)
+                    if err != nil {
+                        toolOutput = fmt.Sprintf("Error executing tool '%s': %v", tc.Name, err)
+                    } else {
+                        toolOutput = out
+                    }
+                }
 
 				tmsg := ToolMessage{
 					Role:    "tool",
@@ -226,6 +275,17 @@ func ChatWithLLM(question string) chan string {
 	}()
 
 	return ch
+}
+
+// requiresApproval returns true if the given tool name is considered
+// potentially destructive or file-modifying and thus needs user approval.
+func requiresApproval(toolName string) bool {
+    switch toolName {
+    case tools.ToolAppendFile, tools.ToolPatchFile, tools.ToolBash, tools.ToolAddTodo, tools.ToolMarkTodoAsDone:
+        return true
+    default:
+        return false
+    }
 }
 
 func GetFormattedTodoList() string {
