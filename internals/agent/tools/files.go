@@ -18,9 +18,19 @@ type FilePatch struct {
 	Content   string `json:"content"`
 }
 
+type PatchFilesToolArgs struct {
+	FilePath string      `json:"filePath"`
+	Patches  []FilePatch `json:"patches"`
+}
+
 type FileInsert struct {
 	InsertAfter int    `json:"insertAfter"`
 	Content     string `json:"content"`
+}
+
+type AppendFileToolArgs struct {
+	FilePath string       `json:"filePath"`
+	Inserts  []FileInsert `json:"inserts"`
 }
 
 type ReadFile struct {
@@ -29,11 +39,12 @@ type ReadFile struct {
 	EndLine   int    `json:"endLine"`
 }
 
-func handleInsertIntoTextFile(argsJSON string) (string, error) {
-	var args struct {
-		FilePath string       `json:"filePath"`
-		Inserts  []FileInsert `json:"inserts"`
-	}
+type ReadFilesToolArgs struct {
+	Reads []ReadFile `json:"filePaths"`
+}
+
+func handleAppendFile(argsJSON string) (string, error) {
+	var args AppendFileToolArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "", err
 	}
@@ -41,14 +52,25 @@ func handleInsertIntoTextFile(argsJSON string) (string, error) {
 	fullPath := buildPathFromRootDir(args.FilePath)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			err = os.WriteFile(fullPath, []byte(""), 0o644)
-			if err != nil {
-				return "", err
+		pathSplit := strings.Split(fullPath, "/")
+		lastIdx := len(pathSplit) - 1
+		if pathSplit[lastIdx] == "/" {
+			lastIdx--
+		}
+		pathTillTheParentDir := strings.Join(pathSplit[:lastIdx], "/")
+
+		if _, err = os.ReadDir(pathTillTheParentDir); err != nil {
+			log.Println("creating new directory:", pathTillTheParentDir)
+			if err = os.MkdirAll(pathTillTheParentDir, 0o755); err != nil {
+				return fmt.Sprintf("Failed to the file %q or required directories. Error: %s", args.FilePath, err), nil
 			}
 		} else {
-			log.Println("ERROR:", err)
-			return fmt.Sprintf("Error when working on %q file. Error message: %q", args.FilePath, err), nil
+			log.Println("directory exists:", pathTillTheParentDir)
+		}
+
+		err = os.WriteFile(fullPath, []byte(""), 0o644)
+		if err != nil {
+			return "", err
 		}
 	}
 
@@ -74,10 +96,7 @@ func handleInsertIntoTextFile(argsJSON string) (string, error) {
 }
 
 func handlePatchTextFile(argsJSON string) (string, error) {
-	var args struct {
-		FilePath string      `json:"filePath"`
-		Patches  []FilePatch `json:"patches"`
-	}
+	var args PatchFilesToolArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "", err
 	}
@@ -121,9 +140,7 @@ func handlePatchTextFile(argsJSON string) (string, error) {
 }
 
 func handleReadFiles(argsJSON string) (string, error) {
-	var args struct {
-		Reads []ReadFile `json:"filePaths"`
-	}
+	var args ReadFilesToolArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "", err
 	}

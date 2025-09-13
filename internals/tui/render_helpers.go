@@ -36,23 +36,23 @@ func renderHistory(width int) string {
 		}
 
 		if msg.IsAIMsg() {
-			aimsg := msg.ToAIMessage()
+			aiMsg := msg.ToAIMessage()
 
-			if aimsg.Reasoning != "" {
+			if aiMsg.Reasoning != "" {
 				b.WriteString("\n")
-				plainReasoning := strings.ReplaceAll(aimsg.Reasoning, "\n\n", "\n")
+				plainReasoning := strings.ReplaceAll(aiMsg.Reasoning, "\n\n", "\n")
 				b.WriteString(mutedText.Width(width).Render(
 					clipTopLines(wrapLines(plainReasoning, width), 4),
 				))
 				b.WriteString("\n")
 			}
 
-			if aimsg.Output != "" {
-				b.WriteString(styledText(aimsg.Output, width))
+			if aiMsg.Output != "" {
+				b.WriteString(styledText(aiMsg.Output, width))
 				b.WriteString("\n")
 			}
 
-			for _, tc := range aimsg.ToolCalls {
+			for _, tc := range aiMsg.ToolCalls {
 				b.WriteString("\n")
 				b.WriteString(wrapLines(italicText.Bold(true).Render("🔧 CLI-Agent is using tools:"), width))
 				b.WriteString("\n")
@@ -67,25 +67,25 @@ func renderHistory(width int) string {
 					} else {
 						cmdline = strings.TrimSpace(args.Cmd)
 					}
-					toolLine = fmt.Sprintf("  ↳ %s → %s", tc.Name, cmdline)
+					toolLine = fmt.Sprintf("  ↳ %s → %s", tc.Name, mutedText.Render(cmdline))
 				} else {
 					toolLine = fmt.Sprintf("  ↳ %s", tc.Name)
 				}
-				b.WriteString(wrapLines(italicText.Render(toolLine), width))
-				b.WriteString("\n")
+				b.WriteString(wrapLines(toolLine, width))
+				b.WriteString("\n\n")
 			}
 		}
 
 		if msg.IsToolMsg() {
-			tmsg := msg.ToToolMessage()
-			b.WriteString(labelSt.Render(fmt.Sprintf("  » %s", tmsg.Name)))
+			toolMsg := msg.ToToolMessage()
+			b.WriteString(labelSt.Render(fmt.Sprintf("  ↳ %s", toolMsg.Name)))
 			b.WriteString("\n")
-			if strings.Contains(tmsg.Name, "todo") {
+			if strings.Contains(toolMsg.Name, "todo") {
 				todoList := agent.GetFormattedTodoList()
 				// todoList = strings.Replace("<current_todo_list>")
 				b.WriteString(lipgloss.NewStyle().Bold(true).Padding(2).Render(wrapLines(todoList, width-2*2)))
 			} else {
-				b.WriteString(mutedText.Italic(true).PaddingLeft(2).Render(clipBottomLines(wrapLines(tmsg.Content, width-2), 10)))
+				b.WriteString(mutedText.Italic(true).PaddingLeft(2).Render(clipBottomLines(wrapLines(toolMsg.Content, width-2), 10)))
 			}
 			b.WriteString("\n")
 		}

@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-
-	"github.com/sifatulrabbi/cli-agent/internals/utils"
 )
 
 var (
@@ -42,15 +40,12 @@ func Prepare() {
 			if err = os.MkdirAll(WorkingPath, 0o755); err != nil {
 				log.Fatalln("ERROR: Unable to prepare the directory './tmp' for dev setup.")
 			}
-			if err = os.WriteFile(filepath.Join(WorkingPath, "./.gitignore"), []byte("logs\n.env"), 0o644); err != nil {
-				log.Fatalln("ERROR: Unable to prepare the directory './tmp' for dev setup.")
-			}
 		}
 	}
 
 	OpenaiAPIKey = os.Getenv("OPENAI_API_KEY")
 	OpenRouterAPIKey = os.Getenv("OPENROUTER_API_KEY")
-	LogFilePath = utils.Ternary(DevMode, "./tmp/logs/debug.log", "/tmp/cli-agent/debug.log")
+	LogFilePath = "/tmp/cli-agent/debug.log"
 
 	// Ensure the todo list file exists
 	if _, err = os.ReadDir(TodosFile); os.IsNotExist(err) {
