@@ -47,12 +47,10 @@ func handleBash(argsJSON string) (string, error) {
 
 	// Whitelist of allowed commands:
 	allowed := map[string]bool{
-		"ls": true, "cat": true, "grep": true, "rg": true, "sed": true, "awk": true,
-		"find": true, "head": true, "tail": true, "wc": true, "cut": true, "sort": true,
-		"uniq": true, "stat": true, "readlink": true, "basename": true, "dirname": true,
-		"echo": true, "printf": true, "mkdir": true, "touch": true, "mv": true, "rm": true,
-		"rmdir": true, "python3": true, "go": true, "node": true, "npm": true, "pip": true,
-		"pnpm": true, "bun": true,
+		"ls": true, "find": true, "stat": true, "readlink": true, "basename": true,
+		"dirname": true, "echo": true, "mkdir": true, "touch": true, "mv": true,
+		"rm": true, "rmdir": true, "cd": true,
+		"python3": true, "go": true, "node": true, "npm": true, "pip": true, "pnpm": true, "bun": true,
 	}
 	if !allowed[cmdName] {
 		return "", fmt.Errorf("command %q is not allowed", cmdName)

@@ -1,5 +1,34 @@
-from langchain_core.tools import tool
+from typing import Optional
 from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+class ReadFile(BaseModel):
+    filePath: str = Field(
+        ...,
+        description="The path of the file. Make sure to include the entire path from ./ till the file. Must be provided.",
+    )
+    startLine: Optional[int] = Field(
+        1,
+        description="The start line for the reading operation. No need to pass a value when reading the entire file.",
+    )
+    endLine: Optional[int] = Field(
+        0,
+        description="The end line for the reading operation. No need to pass a value when reading the entire file.",
+    )
+
+
+class ReadFiles(BaseModel):
+    reads: list[ReadFile] = Field(..., description="A list of read operations.")
+
+
+@tool(
+    "read_files",
+    args_schema=ReadFiles,
+    description="Use this to read multiple files at once, safely, and securely. This is a must use for reading files of the project!",
+)
+def read_files_tool():
+    return
 
 
 class AppendFileInsert(BaseModel):

@@ -21,8 +21,8 @@ from tools.tools import (
     bash_tool,
     grep_tool,
     patch_file_tool,
-    add_todo_tool,
-    mark_todo_as_done_tool,
+    # add_todo_tool,
+    # mark_todo_as_done_tool,
 )
 from prompt import SYS_PROMPT
 
@@ -36,8 +36,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# model_name = "gpt-5-mini"
-model_name = "gpt-4.1-mini"
+model_name = "gpt-5-mini"
+# model_name = "gpt-4.1-mini"
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model=model_name,
@@ -50,8 +50,8 @@ tools_available = [
     bash_tool,
     grep_tool,
     patch_file_tool,
-    add_todo_tool,
-    mark_todo_as_done_tool,
+    # add_todo_tool,
+    # mark_todo_as_done_tool,
 ]
 
 

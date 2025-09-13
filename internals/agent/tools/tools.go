@@ -1,6 +1,7 @@
 package tools
 
 const (
+	ToolReadFiles      = "read_files"
 	ToolAppendFile     = "append_file"
 	ToolPatchFile      = "patch_file"
 	ToolGrep           = "grep"
