@@ -46,7 +46,10 @@ class AppendFile(BaseModel):
 @tool(
     "append_file",
     args_schema=AppendFile,
-    description="Insert content into a text file in the project. Must provide the full path. (Note: the full path can be obtained by using the 'ls' tool.)",
+    description=(
+        "Insert content into a text file in the project. Must provide the full path. "
+        "(Note: the full path can be obtained by using the 'list_files' tool.)"
+    ),
 )
 def append_file_tool():
     return
@@ -76,7 +79,7 @@ class PatchFile(BaseModel):
     description=(
         "Patch a text file by replacing existing line ranges only. "
         "Insertion is not supported here; use 'append_file' for insertions. "
-        "Must provide the full path (obtainable via 'ls' tool)."
+        "Must provide the full path (obtainable via 'list_files' tool)."
     ),
 )
 def patch_file_tool():
@@ -102,25 +105,20 @@ def grep_tool():
     return
 
 
-class BashArgs(BaseModel):
-    cmd: str = Field(
-        ...,
-        description=("Command with simple arguments (no pipes/redirects)."),
-    )
+class ListFilesArgs(BaseModel):
+    pass
 
 
 @tool(
-    "bash",
-    args_schema=BashArgs,
+    "ls",
+    args_schema=ListFilesArgs,
     description=(
-        "Execute a safe subset of bash commands within WorkingPath for listing, "
-        "reading, creating, and removing files/dirs. Use relative paths; no pipes/redirects/subshells. "
-        "For content edits, use append_file or patch_file. Return the command you want to run. "
-        "No need to return 'bash -lc' or the 'bash' in the prefix. "
-        "e.g., 'ls -R', 'tail -n 20 filename ', 'sed -n '10,20p' file.py'."
+        "List all files and directories in the WorkingPath. "
+        "Output is wrapped in <all_files_and_dirs> and paths start with './'. "
+        "Entries respect .gitignore patterns."
     ),
 )
-def bash_tool():
+def list_files_tool():
     return
 
 

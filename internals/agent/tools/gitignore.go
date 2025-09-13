@@ -10,8 +10,11 @@ import (
 
 func detectGitIgnores() {
     entries, _ := traverseDir(configs.WorkingPath)
-    dedup := make(map[string]struct{}, len(ignoreFiles))
+    dedup := make(map[string]struct{}, len(ignoreFiles)+len(ignoreDirs))
     for _, v := range ignoreFiles {
+        dedup[v] = struct{}{}
+    }
+    for _, v := range ignoreDirs {
         dedup[v] = struct{}{}
     }
     for _, e := range entries {
@@ -51,4 +54,3 @@ func detectGitIgnores() {
         }
     }
 }
-

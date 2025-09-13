@@ -7,6 +7,8 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 
 type FilePatch struct {
@@ -155,8 +157,23 @@ func handleReadFiles(argsJSON string) (string, error) {
 	return out, nil
 }
 
-func handleListFiles(argsJSON sting) (string, error) {
-	return "", nil
+func handleListFiles(argsJSON string) (string, error) {
+	_ = argsJSON
+	// Refresh .gitignore-derived patterns now that WorkingPath is prepared
+	detectGitIgnores()
+	// Ensure we traverse from the working path and respect ignore rules
+	entries, err := traverseDir(configs.WorkingPath)
+	if err != nil {
+		return "", err
+	}
+	// Prepend project root indicator
+	lines := append([]string{"./"}, entries...)
+	// Wrap output as requested
+	var sb strings.Builder
+	sb.WriteString("<all_files_and_dirs>\n")
+	sb.WriteString(strings.Join(lines, "\n"))
+	sb.WriteString("\n</all_files_and_dirs>")
+	return sb.String(), nil
 }
 
 // formatFileWithLineNumbers reads a single file and returns it with prefixed line numbers

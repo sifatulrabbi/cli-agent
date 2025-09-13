@@ -18,9 +18,9 @@ from model_config import get_model_reasoning_param, get_model_output_version
 from configs import OPENAI_API_KEY
 from tools.tools import (
     append_file_tool,
-    bash_tool,
     grep_tool,
     patch_file_tool,
+    list_files_tool,
     # add_todo_tool,
     # mark_todo_as_done_tool,
 )
@@ -47,9 +47,9 @@ llm = ChatOpenAI(
 )
 tools_available = [
     append_file_tool,
-    bash_tool,
     grep_tool,
     patch_file_tool,
+    list_files_tool,
     # add_todo_tool,
     # mark_todo_as_done_tool,
 ]
