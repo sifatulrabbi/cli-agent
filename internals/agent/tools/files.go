@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sifatulrabbi/cli-agent/internals/configs"
+	"github.com/sifatulrabbi/cli-agent/internals/utils"
 )
 
 type FilePatch struct {
@@ -141,19 +142,31 @@ func handleReadFiles(argsJSON string) (string, error) {
 		if out != "" {
 			out += "\n\n"
 		}
+
 		lines := safeSplit(content)
 		safeStart := p.StartLine - 1
+		safeEnd := p.EndLine
+
 		if p.StartLine > len(lines) || p.StartLine < 0 {
 			safeStart = 0
 		}
-		safeEnd := p.EndLine
 		if p.EndLine < 1 || p.EndLine > len(lines) {
 			safeEnd = len(lines)
 		}
-		out += fmt.Sprintf("<file_content name=%q>\n%s\n</file_content>",
+
+		fileContent := fmt.Sprintf("<file_content name=%q>\n%s\n</file_content>",
 			p,
 			strings.Join(lines[safeStart:safeEnd], "\n"))
+
+		outTokens := utils.CountTokens(fileContent)
+		if outTokens > 2000 {
+			safeEnd = safeEnd / 2
+			fileContent = fmt.Sprintf("Showing from line %d to line %d since the file is too large.\n<file_content name=%q>\n%s\n</file_content>",
+				safeStart+1, safeEnd, p, strings.Join(lines[safeStart:safeEnd], "\n"))
+		}
+		out += fileContent
 	}
+
 	return out, nil
 }
 

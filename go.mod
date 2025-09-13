@@ -11,6 +11,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go/v2 v2.1.1
 	github.com/spf13/cobra v1.9.1
+	github.com/tiktoken-go/tokenizer v0.7.0
 	gorm.io/datatypes v1.2.6
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.2
@@ -27,7 +28,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/dlclark/regexp2 v1.11.0 // indirect
+	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
