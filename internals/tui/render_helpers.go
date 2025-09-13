@@ -82,7 +82,6 @@ func renderHistory(width int) string {
 			b.WriteString("\n")
 			if strings.Contains(toolMsg.Name, "todo") {
 				todoList := agent.GetFormattedTodoList()
-				// todoList = strings.Replace("<current_todo_list>")
 				b.WriteString(lipgloss.NewStyle().Bold(true).Padding(2).Render(wrapLines(todoList, width-2*2)))
 			} else {
 				b.WriteString(mutedText.Italic(true).PaddingLeft(2).Render(clipBottomLines(wrapLines(toolMsg.Content, width-2), 10)))
