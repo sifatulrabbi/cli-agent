@@ -1,63 +1,59 @@
 package db
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"time"
 )
 
-var DBPath = "/tmp/cli-agent.db"
+const (
+	MsgRoleAI     = "ai"
+	MsgRoleUser   = "human"
+	MsgRoleTool   = "tool"
+	MsgRoleSystem = "system"
+)
 
-func init() {
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath != "" {
-		DBPath = dbPath
-	}
-	if err := AutoMigrate(); err != nil {
-		log.Fatalln("Failed to migrate the database:", err)
-	}
+type ToolCall struct {
+	Name   string `json:"name"`
+	CallID string `json:"call_id"`
+	Args   string `json:"args"`
 }
 
-// gormDB is the shared GORM connection. Use Get() to open/lazy-init.
-var gormDB *gorm.DB
+// type Usage struct {
+// 	Input  int `json:"input"`
+// 	Output int `json:"output"`
+// 	Total  int `json:"total"`
+// }
 
-// Get returns a singleton *gorm.DB connected to the SQLite database at DBPath.
-// It lazily opens the connection and ensures the parent directory exists.
-func Get() (*gorm.DB, error) {
-	if gormDB != nil {
-		return gormDB, nil
-	}
-
-	// Ensure parent directory exists for the DB file path
-	if dir := filepath.Dir(DBPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create db dir: %w", err)
-		}
-	}
-
-	db, err := gorm.Open(sqlite.Open(DBPath), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite db: %w", err)
-	}
-
-	// Keep a small pool, SQLite works best with fewer writers
-	if sqlDB, err := db.DB(); err == nil {
-		sqlDB.SetMaxOpenConns(1)
-	}
-
-	gormDB = db
-	return gormDB, nil
+type AgentHistory struct {
+	SessionID   string           `json:"sessionId"`
+	WorkingPath string           `json:"workingPath"`
+	ModelName   string           `json:"modelName"` // e.g. gpt-5/medium
+	CreatedAt   time.Time        `json:"createdAt"`
+	UpdatedAt   time.Time        `json:"updatedAt"`
+	Messages    []HistoryMessage `json:"messages"`
 }
 
-// AutoMigrate is a small helper to migrate any provided models.
-func AutoMigrate(models ...any) error {
-	db, err := Get()
-	if err != nil {
-		return err
-	}
-	return db.AutoMigrate(models...)
+type HistoryMessage struct {
+	Role       string     `json:"role"`
+	Reasoning  string     `json:"reasoning"`
+	ToolCalls  []ToolCall `json:"toolCalls"`
+	Text       string     `json:"text"`
+	ToolCallID string     `json:"toolCallId"`
+	// RawJSON    string     `json:"rawJson"`
+	// Usage      Usage      `json:"usage"`
+}
+
+func (m HistoryMessage) IsAI() bool { return m.Role == MsgRoleAI }
+
+func (m HistoryMessage) IsUser() bool { return m.Role == MsgRoleUser }
+
+func (m HistoryMessage) IsTool() bool { return m.Role == MsgRoleTool }
+
+func (m HistoryMessage) IsSystem() bool { return m.Role == MsgRoleSystem }
+
+func GetHistory(workingPath string) (*AgentHistory, error) {
+	return nil, nil
+}
+
+func SaveHistory(history *AgentHistory) error {
+	return nil
 }

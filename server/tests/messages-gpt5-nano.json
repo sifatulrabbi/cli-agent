@@ -1,0 +1,135 @@
+[
+  {
+    "content": "You are an helpful assistant. You will assist the user with their requests.",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "system",
+    "name": null,
+    "id": null
+  },
+  {
+    "content": "What is the current weather in Dhaka, Bangladesh?",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "human",
+    "name": null,
+    "id": null,
+    "example": false
+  },
+  {
+    "content": [
+      {
+        "id": "rs_03c2c6af15c38c8e0068c68c90d718819593afbfe5bcc7ffb4",
+        "summary": [
+          {
+            "text": "**Fetching weather information**\n\nI need to respond helpfully since the user is asking about the current weather in Dhaka, Bangladesh. I'll use the weather tool to get this information, calling functions.get_weather_info with the city name \"Dhaka\" and the country name \"Bangladesh.\" Since the user only wants weather for one city, we don\u2019t need a parallel wrapper. Once I get the response, I'll summarize the weather details like temperature, conditions, humidity, wind, and maybe the forecast. Let's call the tool!",
+            "type": "summary_text"
+          },
+          {
+            "text": "**Executing the weather tool call**\n\nI\u2019m ready to proceed with fetching the weather. I\u2019ll use functions.get_weather_info with the parameters {city_name: \"Dhaka\", country_name: \"Bangladesh\"} to get the latest data. Once I have that, I can display the weather information. If the tool call fails, I\u2019ll make sure to handle it gracefully so the user still gets helpful feedback. Let's get this call done and retrieve the current weather!",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "arguments": "{\"city_name\":\"Dhaka\",\"country_name\":\"Bangladesh\"}",
+        "call_id": "call_6GYBlkJBH2DA21vAb6QEIAaB",
+        "name": "get_weather_info",
+        "type": "function_call",
+        "id": "fc_03c2c6af15c38c8e0068c68c957468819592f7e98d582382f3",
+        "status": "completed"
+      }
+    ],
+    "additional_kwargs": {},
+    "response_metadata": {
+      "id": "resp_03c2c6af15c38c8e0068c68c8ff608819585926007f1c5ed74",
+      "created_at": 1757842576.0,
+      "metadata": {},
+      "model": "gpt-5-nano-2025-08-07",
+      "object": "response",
+      "service_tier": "default",
+      "status": "completed",
+      "model_name": "gpt-5-nano-2025-08-07"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "resp_03c2c6af15c38c8e0068c68c8ff608819585926007f1c5ed74",
+    "example": false,
+    "tool_calls": [
+      {
+        "name": "get_weather_info",
+        "args": { "city_name": "Dhaka", "country_name": "Bangladesh" },
+        "id": "call_6GYBlkJBH2DA21vAb6QEIAaB",
+        "type": "tool_call"
+      }
+    ],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 82,
+      "output_tokens": 221,
+      "total_tokens": 303,
+      "input_token_details": { "cache_read": 0 },
+      "output_token_details": { "reasoning": 192 }
+    }
+  },
+  {
+    "content": "The currently temperature in Dhaka, Bangladesh is 27 degree celsius with light rain that might continue for another hour.",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "tool",
+    "name": "get_weather_info",
+    "id": null,
+    "tool_call_id": "call_6GYBlkJBH2DA21vAb6QEIAaB",
+    "artifact": null,
+    "status": "success"
+  },
+  {
+    "content": [
+      {
+        "id": "rs_03c2c6af15c38c8e0068c68c97b6088195905e00b3149e2d46",
+        "summary": [
+          {
+            "text": "**Summarizing current weather**\n\nThe tool returned that the current temperature in Dhaka, Bangladesh is 27\u00b0C with light rain expected to continue for about another hour. I need to respond succinctly, presenting this information clearly. I could also mention that additional details like humidity and wind are available if the user wants them. Maybe I'll suggest setting weather alerts or providing a forecast too. I'll make sure to let the user know that weather information can change.",
+            "type": "summary_text"
+          },
+          {
+            "text": "**Preparing concise weather response**\n\nI want to respond concisely. The tool indicates that the current temperature is 27\u00b0C with light rain and that it might continue for another hour. I should also mention that I can fetch additional details like humidity, wind, and a 24-hour forecast if needed. For clarity, I\u2019ll include a short direct line, followed by bullet points summarizing the conditions. It\u2019ll look like this: \n\n- Conditions: Light rain \n- Temperature: 27\u00b0C \n- Prediction: Rain may continue for about an hour\n\nI\u2019ll ensure the final response is clear and helpful!",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "type": "text",
+        "text": "Current weather in Dhaka, Bangladesh:\n- Temperature: 27\u00b0C\n- Conditions: Light rain\n- Rain may continue for about another hour\n\nWould you like more details (humidity, wind, or a 24-hour forecast)?",
+        "annotations": [],
+        "id": "msg_03c2c6af15c38c8e0068c68c9c4820819580f13a230b61b173"
+      }
+    ],
+    "additional_kwargs": {},
+    "response_metadata": {
+      "id": "resp_03c2c6af15c38c8e0068c68c970bcc81959ebb0ac2a9bcb974",
+      "created_at": 1757842583.0,
+      "metadata": {},
+      "model": "gpt-5-nano-2025-08-07",
+      "object": "response",
+      "service_tier": "default",
+      "status": "completed",
+      "model_name": "gpt-5-nano-2025-08-07"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "resp_03c2c6af15c38c8e0068c68c970bcc81959ebb0ac2a9bcb974",
+    "example": false,
+    "tool_calls": [],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 391,
+      "output_tokens": 309,
+      "total_tokens": 700,
+      "input_token_details": { "cache_read": 0 },
+      "output_token_details": { "reasoning": 256 }
+    }
+  }
+]

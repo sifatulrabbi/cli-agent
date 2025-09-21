@@ -14,7 +14,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from pydantic import BaseModel
-from model_config import get_model_reasoning_param, get_model_output_version
 from configs import OPENAI_API_KEY
 from tools.tools import (
     append_file_tool,
@@ -24,7 +23,8 @@ from tools.tools import (
     # add_todo_tool,
     # mark_todo_as_done_tool,
 )
-from prompt import SYS_PROMPT
+from .prompt import SYS_PROMPT
+from .model_config import get_model_reasoning_param, get_model_output_version
 
 
 app = FastAPI(title="CLI-Agent Server", version="0.1.0")

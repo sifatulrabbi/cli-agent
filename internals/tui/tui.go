@@ -1,12 +1,12 @@
 package tui
 
 import (
-    "encoding/json"
-    "fmt"
-    "log"
-    "os"
-    "strings"
-    "time"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -20,11 +20,11 @@ import (
 )
 
 type (
-    ErrMsg         string
-    InfoMsg        string
-    streamChunkMsg string
-    streamDoneMsg  struct{}
-    ClearStatusMsg struct{}
+	ErrMsg         string
+	InfoMsg        string
+	streamChunkMsg string
+	streamDoneMsg  struct{}
+	ClearStatusMsg struct{}
 )
 
 const (
@@ -33,14 +33,14 @@ const (
 )
 
 type model struct {
-    height int
-    width  int
+	height int
+	width  int
 
-    ch <-chan string
+	ch <-chan string
 
-    busy       bool
-    busyStatus string
-    status     string
+	busy       bool
+	busyStatus string
+	status     string
 
 	buf          strings.Builder
 	input        textarea.Model
@@ -48,16 +48,16 @@ type model struct {
 	vp           viewport.Model
 	inputMaxRows int
 
-    // file path suggestions when typing '@'
-    showSuggestions      bool
-    suggestions          []string
-    selectedSuggestionIx int
-    suggestionsOffset    int
+	// file path suggestions when typing '@'
+	showSuggestions      bool
+	suggestions          []string
+	selectedSuggestionIx int
+	suggestionsOffset    int
 
-    // pending approval from agent before executing a tool
-    awaitingApproval bool
-    approvalTool     string
-    approvalArgs     string
+	// pending approval from agent before executing a tool
+	awaitingApproval bool
+	approvalTool     string
+	approvalArgs     string
 }
 
 func New() model {
@@ -93,10 +93,10 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    m.input.Placeholder = getInputPlaceholder()
+	m.input.Placeholder = getInputPlaceholder()
 
-    switch msg := msg.(type) {
-    case tea.WindowSizeMsg:
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
 		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 1)
@@ -124,31 +124,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		log.Printf("Max width: %d, viewport width: %d\n", m.width, m.vp.Width)
 		return m, nil
 
-    case tea.KeyMsg:
-        // If awaiting approval, intercept keys for yes/no
-        if m.awaitingApproval {
-            switch msg.String() {
-            case "y", "Y", "enter":
-                m.status = successSt.Render("Approved action: " + m.approvalTool)
-                m.awaitingApproval = false
-                m.approvalTool = ""
-                m.approvalArgs = ""
-                // Inform agent
-                agent.SendApprovalDecision(true)
-                return m, clearMsgTick()
-            case "n", "N", "esc", "ctrl+c":
-                m.status = errorSt.Render("Rejected action: " + m.approvalTool)
-                m.awaitingApproval = false
-                m.approvalTool = ""
-                m.approvalArgs = ""
-                agent.SendApprovalDecision(false)
-                return m, clearMsgTick()
-            default:
-                // Ignore other keys while awaiting approval
-                return m, nil
-            }
-        }
-        switch msg.String() {
+	case tea.KeyMsg:
+		// If awaiting approval, intercept keys for yes/no
+		if m.awaitingApproval {
+			switch msg.String() {
+			case "y", "Y", "enter":
+				m.status = successSt.Render("Approved action: " + m.approvalTool)
+				m.awaitingApproval = false
+				m.approvalTool = ""
+				m.approvalArgs = ""
+				// Inform agent
+				agent.SendApprovalDecision(true)
+				return m, clearMsgTick()
+			case "n", "N", "esc", "ctrl+c":
+				m.status = errorSt.Render("Rejected action: " + m.approvalTool)
+				m.awaitingApproval = false
+				m.approvalTool = ""
+				m.approvalArgs = ""
+				agent.SendApprovalDecision(false)
+				return m, clearMsgTick()
+			default:
+				// Ignore other keys while awaiting approval
+				return m, nil
+			}
+		}
+		switch msg.String() {
 
 		case "/exit", "ctrl+c":
 			return m, tea.Quit
@@ -160,10 +160,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+j":
 			// Insert a newline at the cursor and resize up to max height.
 			m.input.InsertString("\n")
-			visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-			if visibleRows < 1 {
-				visibleRows = 1
-			}
+			visibleRows := max(min(m.inputMaxRows, countLines(m.input.Value())), 1)
 			m.input.SetHeight(visibleRows)
 			suggLines := 0
 			if m.showSuggestions {
@@ -249,10 +246,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.suggestionsOffset = 0
 					}
 					// Adjust input/viewport heights after modification
-					visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-					if visibleRows < 1 {
-						visibleRows = 1
-					}
+					visibleRows := max(min(m.inputMaxRows, countLines(m.input.Value())), 1)
 					m.input.SetHeight(visibleRows)
 					suggLines := 0
 					if m.showSuggestions {
@@ -327,27 +321,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 
-    case streamChunkMsg:
-        s := string(msg)
-        if strings.HasPrefix(s, "APPROVAL_REQUEST ") {
-            payload := strings.TrimPrefix(s, "APPROVAL_REQUEST ")
-            type approval struct{ Tool string `json:"tool"`; Args string `json:"args"` }
-            var a approval
-            if err := json.Unmarshal([]byte(payload), &a); err == nil {
-                m.awaitingApproval = true
-                m.approvalTool = a.Tool
-                m.approvalArgs = a.Args
-                m.busy = true
-                m.busyStatus = "Awaiting your approval… (y/n)"
-            }
-            return m, m.waitForChunk()
-        }
-        m.busyStatus = "Thinking…"
-        m.busy = true
-        isAtBottom := m.vp.AtBottom()
-        // Re-render the full history (agent updates History incrementally)
-        m.vp.SetContent(renderHistory(m.vp.Width))
-        if isAtBottom {
+	case streamChunkMsg:
+		s := string(msg)
+		if strings.HasPrefix(s, "APPROVAL_REQUEST ") {
+			payload := strings.TrimPrefix(s, "APPROVAL_REQUEST ")
+			type approval struct {
+				Tool string `json:"tool"`
+				Args string `json:"args"`
+			}
+			var a approval
+			if err := json.Unmarshal([]byte(payload), &a); err == nil {
+				m.awaitingApproval = true
+				m.approvalTool = a.Tool
+				m.approvalArgs = a.Args
+				m.busy = true
+				m.busyStatus = "Awaiting your approval… (y/n)"
+			}
+			return m, m.waitForChunk()
+		}
+		m.busyStatus = "Thinking…"
+		m.busy = true
+		isAtBottom := m.vp.AtBottom()
+		// Re-render the full history (agent updates History incrementally)
+		m.vp.SetContent(renderHistory(m.vp.Width))
+		if isAtBottom {
 			m.vp.GotoBottom()
 		}
 		// Update viewport height in case todos changed via tool calls
@@ -425,47 +422,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-    maxContentWidth := max(m.width-(ROOT_PADDING_X*2)-2, 1)
-    header := titleSt.Render("CLI Agent  ")
-    header += mutedText.Render(configs.WorkingPath)
-    busyLine := ""
-    if m.busy {
-        busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
-    }
-    inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
-    controls := helpSt.Render(fmt.Sprintf("Enter: submit • Ctrl+J: new line • /exit: quit • /clear: clear history • Model: %s",
-        agent.Model.String()))
+	maxContentWidth := max(m.width-(ROOT_PADDING_X*2)-2, 1)
+	header := titleSt.Render("CLI Agent  ")
+	header += mutedText.Render(configs.WorkingPath)
+	busyLine := ""
+	if m.busy {
+		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
+	}
+	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
+	controls := helpSt.Render(fmt.Sprintf("Enter: submit • Ctrl+J: new line • /exit: quit • /clear: clear history • Model: %s",
+		agent.Model.String()))
 
-    var lines []string
-    lines = append(lines, header)
-    lines = append(lines, m.vp.View())
-    // Approval prompt overlay inline (above busy/status)
-    if m.awaitingApproval {
-        // Show compact approval prompt with tool and truncated args
-        trimmedArgs := m.approvalArgs
-        if len(trimmedArgs) > 200 {
-            trimmedArgs = trimmedArgs[:200] + "…"
-        }
-        prompt := fmt.Sprintf("Approve action? %s\nArgs: %s\nPress 'y' to approve or 'n' to reject.", m.approvalTool, trimmedArgs)
-        box := inputBoxSt.Width(maxContentWidth).Render(prompt)
-        lines = append(lines, box)
-    }
-    lines = append(lines, busyLine)
-    lines = append(lines, m.status)
-    // Render todo list (if any) above the input field
-    if todo := renderTodoPanel(maxContentWidth); todo != "" {
-        lines = append(lines, todo)
-    }
-    // Disable input while awaiting approval
-    if m.awaitingApproval {
-        lines = append(lines, helpSt.Render("Input disabled while awaiting approval…"))
-    } else {
-        lines = append(lines, inputField)
-    }
-    if m.showSuggestions && len(m.suggestions) > 0 {
-        lines = append(lines, renderSuggestions(maxContentWidth, m.suggestions, m.selectedSuggestionIx, m.suggestionsOffset))
-    }
-    lines = append(lines, controls)
+	var lines []string
+	lines = append(lines, header)
+	lines = append(lines, m.vp.View())
+	// Approval prompt overlay inline (above busy/status)
+	if m.awaitingApproval {
+		// Show compact approval prompt with tool and truncated args
+		trimmedArgs := m.approvalArgs
+		if len(trimmedArgs) > 200 {
+			trimmedArgs = trimmedArgs[:200] + "…"
+		}
+		prompt := fmt.Sprintf("Approve action? %s\nArgs: %s\nPress 'y' to approve or 'n' to reject.", m.approvalTool, trimmedArgs)
+		box := inputBoxSt.Width(maxContentWidth).Render(prompt)
+		lines = append(lines, box)
+	}
+	lines = append(lines, busyLine)
+	lines = append(lines, m.status)
+	// Render todo list (if any) above the input field
+	if todo := renderTodoPanel(maxContentWidth); todo != "" {
+		lines = append(lines, todo)
+	}
+	// Disable input while awaiting approval
+	if m.awaitingApproval {
+		lines = append(lines, helpSt.Render("Input disabled while awaiting approval…"))
+	} else {
+		lines = append(lines, inputField)
+	}
+	if m.showSuggestions && len(m.suggestions) > 0 {
+		lines = append(lines, renderSuggestions(maxContentWidth, m.suggestions, m.selectedSuggestionIx, m.suggestionsOffset))
+	}
+	lines = append(lines, controls)
 
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).

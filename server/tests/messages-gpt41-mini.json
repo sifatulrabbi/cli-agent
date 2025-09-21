@@ -1,0 +1,119 @@
+[
+  {
+    "content": "You are an helpful assistant. You will assist the user with their requests.\n",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "system",
+    "name": null,
+    "id": null
+  },
+  {
+    "content": "What is the current weather in Dhaka, Bangladesh?",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "human",
+    "name": null,
+    "id": null,
+    "example": false
+  },
+  {
+    "content": [
+      {
+        "arguments": "{\"city_name\":\"Dhaka\",\"country_name\":\"Bangladesh\"}",
+        "call_id": "call_CYYhZm87mOW9xoMnKAlmHb0V",
+        "name": "get_weather_info",
+        "type": "function_call",
+        "id": "fc_066e14dbd5be6c550068c68e6cb84c8193a1b3b242986f13fd",
+        "status": "completed"
+      }
+    ],
+    "additional_kwargs": {},
+    "response_metadata": {
+      "id": "resp_066e14dbd5be6c550068c68e6bb0f0819396ac4ac82b3e7009",
+      "created_at": 1757843051.0,
+      "metadata": {},
+      "model": "gpt-4.1-mini-2025-04-14",
+      "object": "response",
+      "service_tier": "default",
+      "status": "completed",
+      "model_name": "gpt-4.1-mini-2025-04-14"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "resp_066e14dbd5be6c550068c68e6bb0f0819396ac4ac82b3e7009",
+    "example": false,
+    "tool_calls": [
+      {
+        "name": "get_weather_info",
+        "args": {
+          "city_name": "Dhaka",
+          "country_name": "Bangladesh"
+        },
+        "id": "call_CYYhZm87mOW9xoMnKAlmHb0V",
+        "type": "tool_call"
+      }
+    ],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 77,
+      "output_tokens": 24,
+      "total_tokens": 101,
+      "input_token_details": {
+        "cache_read": 0
+      },
+      "output_token_details": {
+        "reasoning": 0
+      }
+    }
+  },
+  {
+    "content": "The currently temperature in Dhaka, Bangladesh is 27 degree celsius with light rain that might continue for another hour.",
+    "additional_kwargs": {},
+    "response_metadata": {},
+    "type": "tool",
+    "name": "get_weather_info",
+    "id": null,
+    "tool_call_id": "call_CYYhZm87mOW9xoMnKAlmHb0V",
+    "artifact": null,
+    "status": "success"
+  },
+  {
+    "content": [
+      {
+        "type": "text",
+        "text": "The current weather in Dhaka, Bangladesh is 27 degrees Celsius with light rain, which might continue for another hour. Is there anything else you would like to know?",
+        "annotations": [],
+        "id": "msg_066e14dbd5be6c550068c68e6fef2481938cf5c9257cada539"
+      }
+    ],
+    "additional_kwargs": {},
+    "response_metadata": {
+      "id": "resp_066e14dbd5be6c550068c68e6e58e88193bf0ea218bb438bba",
+      "created_at": 1757843054.0,
+      "metadata": {},
+      "model": "gpt-4.1-mini-2025-04-14",
+      "object": "response",
+      "service_tier": "default",
+      "status": "completed",
+      "model_name": "gpt-4.1-mini-2025-04-14"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "resp_066e14dbd5be6c550068c68e6e58e88193bf0ea218bb438bba",
+    "example": false,
+    "tool_calls": [],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+      "input_tokens": 134,
+      "output_tokens": 36,
+      "total_tokens": 170,
+      "input_token_details": {
+        "cache_read": 0
+      },
+      "output_token_details": {
+        "reasoning": 0
+      }
+    }
+  }
+]
+
