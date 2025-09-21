@@ -7,6 +7,7 @@ import (
 
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/packages/param"
 	"github.com/openai/openai-go/v2/shared"
 	"github.com/openai/openai-go/v2/shared/constant"
 	"github.com/sifatulrabbi/cli-agent/internals/configs"
@@ -61,25 +62,22 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 		}
 
 		if msg.IsAI() {
-			assistantParamUnion := openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-					Content:   openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(msg.Text)},
-					Role:      constant.Assistant("assistant"),
-					ToolCalls: []openai.ChatCompletionMessageToolCallUnionParam{},
-				},
-			}
+			assistant := openai.ChatCompletionAssistantMessageParam{}
+			assistant.Content.OfString = param.NewOpt(msg.Text)
 			if len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
-					assistantParamUnion.OfAssistant.ToolCalls = append(assistantParamUnion.OfAssistant.ToolCalls, openai.ChatCompletionMessageToolCallUnionParam{
-						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
-							ID:       tc.CallID,
-							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{Arguments: tc.Args, Name: tc.Name},
-							Type:     constant.Function("function"),
+					openAIToolCall := openai.ChatCompletionMessageFunctionToolCallParam{
+						ID: tc.CallID,
+						Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
+							Arguments: tc.Args,
+							Name:      tc.Name,
 						},
-					})
+						Type: constant.Function("function"),
+					}
+					assistant.ToolCalls = append(assistant.ToolCalls, openai.ChatCompletionMessageToolCallUnionParam{OfFunction: &openAIToolCall})
 				}
 			}
-			params.Messages = append(params.Messages, assistantParamUnion)
+			params.Messages = append(params.Messages, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 		}
 
 		if msg.IsTool() {
@@ -95,6 +93,7 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 
 	responseMsg := completion.Choices[0].Message
 	newAIMsg := db.HistoryMessage{}
+	newAIMsg.Role = db.MsgRoleAI
 	newAIMsg.Text = responseMsg.Content
 	newAIMsg.RawJSON = responseMsg.RawJSON()
 	for _, tc := range responseMsg.ToolCalls {

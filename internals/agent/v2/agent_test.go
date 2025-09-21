@@ -21,8 +21,10 @@ func TestAgent(t *testing.T) {
 		},
 	}
 	testUserInputs := []string{
+		"Hi, I'm Sifatul.",
 		"What can you do for me?",
 		"Can you write me a python script that display the current memory usage of my system?",
+		"explain the script just wrote as if I'm a 5 years old.",
 	}
 	for _, userMsg := range testUserInputs {
 		messages = append(messages, db.HistoryMessage{
