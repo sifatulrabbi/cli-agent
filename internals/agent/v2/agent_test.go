@@ -10,16 +10,35 @@ import (
 
 func TestAgent(t *testing.T) {
 	configs.Prepare()
-
 	modelProvider := ModelProvider{"gpt-5-mini", "low", ProviderOpenAI}
-	testMessages := []db.HistoryMessage{
+
+	messages := []db.HistoryMessage{
 		{
-			Role: db.MsgRoleUser,
-			Text: "Hello who are you?",
+			Role: db.MsgRoleSystem,
+			Text: `You are a helpful assistant. Help the user with their tasks.
+- Your replies must be concise and to the point
+- Never over explain things; get to the point immediately.`,
 		},
 	}
-	fmt.Println("Invoking the LLM...")
-	res, err := modelProvider.Invoke(testMessages)
-	fmt.Println("LLM responded.")
-	fmt.Println(res, err)
+	testUserInputs := []string{
+		"What can you do for me?",
+		"Can you write me a python script that display the current memory usage of my system?",
+	}
+	for _, userMsg := range testUserInputs {
+		messages = append(messages, db.HistoryMessage{
+			Role: db.MsgRoleUser,
+			Text: userMsg,
+		})
+		fmt.Println("USER: ", userMsg)
+
+		res, err := modelProvider.Invoke(messages)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages = res
+		fmt.Println("AI:", messages[len(messages)-1].Text)
+		fmt.Println()
+		fmt.Println("----------------------------")
+		fmt.Println()
+	}
 }

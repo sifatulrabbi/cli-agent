@@ -47,7 +47,12 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 
 	for _, msg := range messages {
 		if msg.IsSystem() {
-			params.Messages = append(params.Messages, openai.SystemMessage(msg.Text))
+			if m.ReasoningEffort != "" {
+				// for reasoning models openai had suggested to use "developerMessage"
+				params.Messages = append(params.Messages, openai.DeveloperMessage(msg.Text))
+			} else {
+				params.Messages = append(params.Messages, openai.SystemMessage(msg.Text))
+			}
 		}
 
 		if msg.IsUser() {
@@ -91,6 +96,7 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 	responseMsg := completion.Choices[0].Message
 	newAIMsg := db.HistoryMessage{}
 	newAIMsg.Text = responseMsg.Content
+	newAIMsg.RawJSON = responseMsg.RawJSON()
 	for _, tc := range responseMsg.ToolCalls {
 		newAIMsg.ToolCalls = append(newAIMsg.ToolCalls, db.ToolCall{
 			Name:   tc.Function.Name,
@@ -98,6 +104,10 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 			CallID: tc.ID,
 		})
 	}
+	newAIMsg.Usage = &db.Usage{}
+	newAIMsg.Usage.Total = completion.Usage.TotalTokens
+	newAIMsg.Usage.Output = completion.Usage.CompletionTokens
+	newAIMsg.Usage.Input = completion.Usage.PromptTokens
 	messages = append(messages, newAIMsg)
 
 	return messages, nil

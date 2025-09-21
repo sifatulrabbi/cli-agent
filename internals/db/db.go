@@ -17,11 +17,29 @@ type ToolCall struct {
 	Args   string `json:"args"`
 }
 
-// type Usage struct {
-// 	Input  int `json:"input"`
-// 	Output int `json:"output"`
-// 	Total  int `json:"total"`
-// }
+type Usage struct {
+	Input  int64 `json:"input"`
+	Output int64 `json:"output"`
+	Total  int64 `json:"total"`
+}
+
+type HistoryMessage struct {
+	Role       string     `json:"role"`
+	Reasoning  string     `json:"reasoning"`
+	ToolCalls  []ToolCall `json:"toolCalls"`
+	Text       string     `json:"text"`
+	ToolCallID string     `json:"toolCallId"`
+	RawJSON    string     `json:"rawJson"`
+	Usage      *Usage     `json:"usage"`
+}
+
+func (hm HistoryMessage) IsAI() bool { return hm.Role == MsgRoleAI }
+
+func (hm HistoryMessage) IsUser() bool { return hm.Role == MsgRoleUser }
+
+func (hm HistoryMessage) IsTool() bool { return hm.Role == MsgRoleTool }
+
+func (hm HistoryMessage) IsSystem() bool { return hm.Role == MsgRoleSystem }
 
 type AgentHistory struct {
 	SessionID   string           `json:"sessionId"`
@@ -32,23 +50,19 @@ type AgentHistory struct {
 	Messages    []HistoryMessage `json:"messages"`
 }
 
-type HistoryMessage struct {
-	Role       string     `json:"role"`
-	Reasoning  string     `json:"reasoning"`
-	ToolCalls  []ToolCall `json:"toolCalls"`
-	Text       string     `json:"text"`
-	ToolCallID string     `json:"toolCallId"`
-	// RawJSON    string     `json:"rawJson"`
-	// Usage      Usage      `json:"usage"`
+func (ah AgentHistory) GetSessionUsage() Usage {
+	totalIn := int64(0)
+	totalOut := int64(0)
+	total := int64(0)
+	for _, msg := range ah.Messages {
+		if msg.Usage != nil {
+			totalIn += msg.Usage.Input
+			totalOut += msg.Usage.Output
+			total += msg.Usage.Total
+		}
+	}
+	return Usage{Input: totalIn, Output: totalOut, Total: total}
 }
-
-func (m HistoryMessage) IsAI() bool { return m.Role == MsgRoleAI }
-
-func (m HistoryMessage) IsUser() bool { return m.Role == MsgRoleUser }
-
-func (m HistoryMessage) IsTool() bool { return m.Role == MsgRoleTool }
-
-func (m HistoryMessage) IsSystem() bool { return m.Role == MsgRoleSystem }
 
 func GetHistory(workingPath string) (*AgentHistory, error) {
 	return nil, nil
