@@ -25,3 +25,8 @@ func NewAgent(history *db.AgentHistory) *CliAgent {
 		modelProvider,
 	}
 }
+
+func (a CliAgent) Invoke(userInput string) chan string {
+	ch := make(chan string)
+	return ch
+}
