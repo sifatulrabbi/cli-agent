@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,10 +15,17 @@ type TuiModel struct {
 	ti textarea.Model
 	vp viewport.Model
 
-	maxWidth    int
-	maxHeight   int
-	inputHeight int
-	busy        bool
+	busy       bool
+	busyStatus string
+	logMessage string
+
+	chatHistory string
+
+	maxWidth     int
+	maxHeight    int
+	inputHeight  int
+	headerHeight int
+	footerHeight int
 }
 
 func (m TuiModel) Init() tea.Cmd {
@@ -27,48 +36,111 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.maxWidth, m.maxHeight = msg.Width, msg.Height
-
 		m.ti.SetWidth(m.maxWidth - 4)
-		m.ti.SetHeight(1)
-
-		m.vp.Style.Width(m.maxWidth - 4)
-		m.vp.Style.Height(m.maxHeight - 10)
+		m.ti.SetHeight(m.inputHeight)
+		m.updateViewportSize()
 		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "/exit", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "up", "down":
+			return m, m.updateTextinput(msg)
+		case "enter":
+			v := strings.TrimSpace(m.ti.Value())
+			switch v {
+			case "":
+				return m, nil
+			case "/exit", "/quit":
+				return m, tea.Quit
+			default:
+				if strings.HasSuffix(v, "\\") {
+					m.ti.SetValue(strings.TrimSuffix(v, "\\"))
+					// increasing the textinput's height when the user adds more lines.
+					if m.inputHeight+1 < 10 {
+						m.inputHeight += 1
+					}
+					return m, m.updateTextinput(msg)
+				}
+				return m, m.handleSubmit()
+			}
 		}
 	}
 
-	var (
-		cmds []tea.Cmd
-		cmd  tea.Cmd
-	)
-	m.ti, cmd = m.ti.Update(msg)
-	cmds = append(cmds, cmd)
-	m.vp, cmd = m.vp.Update(msg)
-	cmds = append(cmds, cmd)
-
-	return m, tea.Batch(cmds...)
+	return m, tea.Batch(m.updateTextinput(msg), m.updateViewport(msg))
 }
 
 func (m TuiModel) View() string {
-	return m.vp.View() + "\n" + m.ti.View()
+	return fmt.Sprintf(
+		"Hello world! TextInput line info: %d\n%s\n%s",
+		m.ti.LineCount(),
+		m.vp.View(),
+		m.ti.View(),
+	)
+}
+
+func (m *TuiModel) updateTextinput(msg tea.Msg) tea.Cmd {
+	m.ti.SetWidth(m.maxWidth - 4)
+	m.ti.SetHeight(m.inputHeight)
+
+	var cmd tea.Cmd
+	m.ti, cmd = m.ti.Update(msg)
+
+	// ensuring the input size get's trimmed when there are lines with no content.
+	if m.inputHeight > m.ti.LineCount() {
+		m.inputHeight = m.ti.LineCount()
+		m.ti.SetWidth(m.maxWidth - 4)
+		m.ti.SetHeight(m.inputHeight)
+	}
+
+	return cmd
+}
+
+// This function calculates and updates the viewport's height based on the other
+// components of the TUI.
+func (m *TuiModel) updateViewportSize() {
+	remainingHeight := m.maxHeight - m.inputHeight - m.headerHeight - m.footerHeight - 2
+	m.vp.Width = m.maxWidth - 4
+	m.vp.Height = remainingHeight
+}
+
+func (m *TuiModel) updateViewport(msg tea.Msg) tea.Cmd {
+	var (
+		cmd         tea.Cmd
+		wasAtBottom = m.vp.AtBottom()
+	)
+
+	m.updateViewportSize()
+	m.vp, cmd = m.vp.Update(msg)
+
+	if wasAtBottom {
+		m.vp.GotoBottom()
+	}
+
+	return cmd
+}
+
+func (m *TuiModel) handleSubmit() tea.Cmd {
+	return nil
 }
 
 func New() TuiModel {
 	m := TuiModel{
-		ti:        textarea.New(),
-		vp:        viewport.New(1, 1),
-		maxWidth:  1,
-		maxHeight: 1,
+		ti:           textarea.New(),
+		vp:           viewport.New(1, 1),
+		maxWidth:     1,
+		maxHeight:    1,
+		inputHeight:  1,
+		headerHeight: 1,
+		footerHeight: 2,
+		busy:         false,
 	}
 
 	m.ti.ShowLineNumbers = false
 	m.ti.Placeholder = "Enter your text"
 	m.ti.Focus()
+	m.ti.SetHeight(m.inputHeight)
 
 	m.vp.MouseWheelEnabled = true
 
