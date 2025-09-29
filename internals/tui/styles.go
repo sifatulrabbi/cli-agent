@@ -16,4 +16,17 @@ var (
 	successSt  = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e"))
 	mutedText  = lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 	italicText = lipgloss.NewStyle().Italic(true)
+
+	headerSt = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accent).
+			Padding(0, 1).
+			Align(lipgloss.Center)
+
+	footerSt = lipgloss.NewStyle().
+			Foreground(subtle).
+			Padding(0, 1).
+			PaddingTop(1)
+
+	styled = lipgloss.NewStyle()
 )
