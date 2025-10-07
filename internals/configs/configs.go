@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	WorkingPath      string = ""
-	OpenaiAPIKey     string = ""
-	OpenRouterAPIKey string = ""
-	LogFilePath      string = ""
-	TodosFile        string = "/tmp/cli-agent/todos"
-	DevMode          bool   = true
+	WorkingPath       string = ""
+	OpenaiAPIKey      string = ""
+	OpenRouterAPIKey  string = ""
+	OpenRouterBaseURL string = "https://openrouter.ai/api/v1"
+	LogFilePath       string = ""
+	TodosFile         string = "/tmp/cli-agent/todos"
+	DevMode           bool   = true
 )
 
 func Prepare() {

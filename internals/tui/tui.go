@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/sifatulrabbi/cli-agent/internals/agent"
+	"github.com/sifatulrabbi/cli-agent/internals/db"
 )
 
 type TuiModel struct {
@@ -32,6 +34,8 @@ type TuiModel struct {
 	headerHeight int
 	footerHeight int
 	statusHeight int
+
+	agent *agent.CLIAgent
 }
 
 func New() TuiModel {
@@ -46,6 +50,7 @@ func New() TuiModel {
 		footerHeight: 2,
 		statusHeight: 2,
 		busy:         false,
+		agent:        agent.NewAgent(&db.AgentHistory{}),
 	}
 
 	m.ti.ShowLineNumbers = false

@@ -25,10 +25,20 @@ type ModelProvider struct {
 	Provider        string `json:"provider"`
 }
 
+func NewDefaultProviderAndModel() ModelProvider {
+	return ModelProvider{
+		ModelName:       "z-ai/glm-4.6",
+		ReasoningEffort: string(openai.ReasoningEffortLow),
+		Provider:        ProviderOpenRouter,
+	}
+}
+
 func (m ModelProvider) Invoke(messages []db.HistoryMessage) ([]db.HistoryMessage, error) {
 	switch m.Provider {
 	case ProviderOpenAI:
 		return m.invokeOpenAIModel(messages)
+	case ProviderOpenRouter:
+		return m.invokeOpenRouterModel(messages)
 	default:
 		log.Fatalf("ERROR: Selected provider: %q is not yet supported!\n", m.Provider)
 	}
@@ -36,7 +46,19 @@ func (m ModelProvider) Invoke(messages []db.HistoryMessage) ([]db.HistoryMessage
 }
 
 func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.HistoryMessage, error) {
-	client := openai.NewClient(option.WithAPIKey(configs.OpenaiAPIKey))
+	return m.invokeOpenAICompatibleProvider(messages, option.WithAPIKey(configs.OpenaiAPIKey))
+}
+
+func (m ModelProvider) invokeOpenRouterModel(messages []db.HistoryMessage) ([]db.HistoryMessage, error) {
+	return m.invokeOpenAICompatibleProvider(
+		messages,
+		option.WithAPIKey(configs.OpenRouterAPIKey),
+		option.WithBaseURL(configs.OpenRouterBaseURL),
+	)
+}
+
+func (m ModelProvider) invokeOpenAICompatibleProvider(messages []db.HistoryMessage, opts ...option.RequestOption) ([]db.HistoryMessage, error) {
+	client := openai.NewClient(opts...)
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{},
 		Model:    openai.ChatModel(m.ModelName),
@@ -92,6 +114,7 @@ func (m ModelProvider) invokeOpenAIModel(messages []db.HistoryMessage) ([]db.His
 	}
 
 	responseMsg := completion.Choices[0].Message
+
 	newAIMsg := db.HistoryMessage{}
 	newAIMsg.Role = db.MsgRoleAI
 	newAIMsg.Text = responseMsg.Content
