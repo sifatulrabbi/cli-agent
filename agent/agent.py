@@ -1,5 +1,10 @@
 from typing import cast
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    BaseMessageChunk,
+    HumanMessage,
+    SystemMessage,
+)
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic.types import SecretStr
@@ -21,10 +26,10 @@ class AgentMemory:
     def __init__(self, *, session_id: str) -> None:
         self.session_id = session_id
 
-    def load(self) -> list[BaseMessage]:
+    async def load(self) -> list[BaseMessage]:
         return self._history
 
-    def save(self, history: list[BaseMessage]) -> bool:
+    async def save(self, history: list[BaseMessage]) -> bool:
         self._history = history
         return True
 
@@ -55,28 +60,35 @@ class Agent:
             api_key=self._api_key,
             model="z-ai/glm-4.6",
             base_url=OPENROUTER_BASE_URL,
-            reasoning_effort="medium",
+            # reasoning_effort="medium",
             reasoning={
                 "effort": "medium",
                 "summary": "auto",
             },
         )
 
-    def run(self, user_msg: str):
-        category = self._classifier(user_msg)
+    async def run(self, user_msg: str):
+        category = await self._classifier(user_msg)
         llm = self._route_to_llm(category)
 
-        history = self._memory.load()
+        history = await self._memory.load()
         history.append(HumanMessage(user_msg))
 
-        result = llm.invoke([SystemMessage(coding_agent_sys_prompt), *history])
+        result: BaseMessageChunk | None = None
+        stream = llm.astream([SystemMessage(coding_agent_sys_prompt), *history])
+        async for chunk in stream:
+            if not result:
+                result = chunk
+            else:
+                result = result + chunk
+            print(chunk.content, end="", flush=True)
 
-        history.append(result)
-        self._memory.save(history)
+        history.append(cast(BaseMessageChunk, result))
+        await self._memory.save(history)
 
         return result.content
 
-    def _classifier(self, user_msg: str):
+    async def _classifier(self, user_msg: str):
         chain = (
             ChatPromptTemplate.from_messages(
                 [
@@ -90,7 +102,9 @@ class Agent:
         category = str(res.content if res.content else "").strip()
         for c in available_categories:
             if c in category:
+                print("    category:", c)
                 return c
+        print("    category:", "non_reasoning_task")
         return "non_reasoning_task"  # fallback
 
     def _route_to_llm(self, category: str):
