@@ -45,6 +45,7 @@ YOU: reasoning_task
 
 patch_using_guide = """\
 <patch_use_policy>
+- Prioritize using `patch` for updating files instead of cat or echo.
 - `patch` consumes a unified diff and applies the described changes to existing files. Each diff starts with `--- old-file` and `+++ new-file`, followed by one or more hunks. You can pipe the diff via a here-doc, from a file, or stdin.
 - A hunk header `@@ -start_old,count_old +start_new,count_new @@` indicates which lines of the original (`-`) and updated (`+`) files are affected. Context lines begin with a space (` `) and must match exactly; removed lines start with `-`; added lines start with `+`.
 - To add lines, set the old count to 0 (or leave out old lines) and list the new lines prefixed with `+`. Example: append `print("extra debug")` to `tools/test_bash_tool.py`:

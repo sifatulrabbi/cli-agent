@@ -17,6 +17,8 @@ async def main():
         print("AI: ", end="", flush=True)
         await agent.run(user_msg)
         print()
+        print("-" * 80)
+        print()
 
 
 if __name__ == "__main__":

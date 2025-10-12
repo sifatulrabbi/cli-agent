@@ -1,5 +1,6 @@
 import subprocess
 import re
+from typing import Optional
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -48,15 +49,11 @@ _dangerous_patterns = [
     r"chmod\s+(-R\s+)?777",  # Dangerous permissions
     r"eval\s+",  # Code evaluation
     r"exec\s+",  # Code execution
-    r"\$\(.*\)",  # Command substitution (potential injection)
-    r"`.*`",  # Command substitution (backticks)
 ]
 
 
 def _is_command_safe(command: str) -> tuple[bool, str]:
     command_lower = command.lower().strip()
-    if len(command) > 10000:
-        return False, "Command exceeds maximum length (10000 characters)"
     for dangerous_cmd in _dangerous_commands:
         if re.search(r"\b" + re.escape(dangerous_cmd) + r"\b", command_lower):
             return False, f"Dangerous command detected: {dangerous_cmd}"
@@ -82,9 +79,9 @@ class BashToolArgsSchema(BaseModel):
         ...,
         description="The bash command to execute. Do not prefix the bash command with something like '/bin/bash' or 'bash -lc' provide the actual command to execute.",
     )
-    timeout: int | None = Field(
-        10,
-        description="A timeout value in seconds for the command. Default is 10 seconds.",
+    timeout: Optional[int] = Field(
+        30,
+        description="A timeout value in seconds for the command. Default is 30 seconds.",
     )
 
 
@@ -95,23 +92,27 @@ class BashToolArgsSchema(BaseModel):
     args_schema=BashToolArgsSchema,
     parse_docstring=False,
 )
-def bash_tool(args: BashToolArgsSchema) -> str:
-    is_safe, reason = _is_command_safe(args.command)
+def bash_tool(command: str, timeout: int | None = 30) -> str:
+    is_safe, reason = _is_command_safe(command)
     if not is_safe:
         return _format_result("", f"SECURITY: Command blocked - {reason}", -1)
 
+    effective_timeout = timeout if timeout is not None else 30
+
     try:
         result = subprocess.run(
-            args.command,
+            command,
             shell=True,
             capture_output=True,
             text=True,
-            timeout=args.timeout,
+            timeout=effective_timeout,
             cwd=_base_path,
         )
         return _format_result(result.stdout, result.stderr, result.returncode)
 
     except subprocess.TimeoutExpired:
-        return _format_result("", f"Command timed out after {args.timeout} seconds", -1)
+        return _format_result(
+            "", f"Command timed out after {effective_timeout} seconds", -1
+        )
     except Exception as e:
         return _format_result("", f"Error executing command: {str(e)}", -1)
