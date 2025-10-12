@@ -1,14 +1,21 @@
-from typing import cast
+from typing import cast, Annotated
+from typing_extensions import TypedDict
 from langchain_core.messages import (
     BaseMessage,
-    BaseMessageChunk,
     HumanMessage,
     SystemMessage,
+    BaseMessageChunk,
 )
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic.types import SecretStr
+from langgraph.graph import StateGraph, START
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt.tool_node import ToolNode, tools_condition
+
 from prompts import classifier_sys_prompt, coding_agent_sys_prompt
+from tools.bash_tool import bash_tool
+from tools.note_tool import note_tool
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -18,6 +25,11 @@ available_categories = [
     "reasoning_task",
     "non_reasoning_task",
 ]
+
+
+# TODO: add a proper type for the state
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
 
 
 class AgentMemory:
@@ -61,32 +73,59 @@ class Agent:
             model="z-ai/glm-4.6",
             base_url=OPENROUTER_BASE_URL,
             # reasoning_effort="medium",
-            reasoning={
-                "effort": "medium",
-                "summary": "auto",
-            },
+            # reasoning={
+            #     "effort": "medium",
+            #     "summary": "auto",
+            # },
         )
 
-    async def run(self, user_msg: str):
-        category = await self._classifier(user_msg)
-        llm = self._route_to_llm(category)
+        tool_node = ToolNode([bash_tool, note_tool])
 
+        self._graph_builder = StateGraph(State)
+        self._graph_builder.add_node("llm", self._llm_node)
+        self._graph_builder.add_node("tools", tool_node)
+        self._graph_builder.add_edge(START, "llm")
+        self._graph_builder.add_conditional_edges("llm", tools_condition)
+        self._graph_builder.add_edge("tools", "llm")
+        self._workflow = self._graph_builder.compile()
+
+    async def run(self, user_msg: str):
         history = await self._memory.load()
         history.append(HumanMessage(user_msg))
 
-        result: BaseMessageChunk | None = None
-        stream = llm.astream([SystemMessage(coding_agent_sys_prompt), *history])
-        async for chunk in stream:
-            if not result:
-                result = chunk
-            else:
-                result = result + chunk
-            print(chunk.content, end="", flush=True)
+        try:
+            final_result = await self._workflow.ainvoke({"messages": history})
+        except Exception as e:
+            print("Error in the run() function:", e)
+            raise e
 
-        history.append(cast(BaseMessageChunk, result))
-        await self._memory.save(history)
+        history = final_result.get("messages")
+        await self._memory.save(cast(list[BaseMessage], history))
 
-        return result.content
+    async def _llm_node(self, state):
+        formatted_prompt = coding_agent_sys_prompt.format(
+            notes="- The project is empty"
+        )
+        try:
+            result: BaseMessageChunk | None = None
+            stream = self._reasoning_llm.astream(
+                [
+                    SystemMessage(formatted_prompt),
+                    *state.get("messages"),
+                ]
+            )
+            async for chunk in stream:
+                if not result:
+                    result = chunk
+                else:
+                    result = result + chunk
+            return {"messages": result}
+        except Exception as e:
+            print("Error in the _llm_node:", e)
+            raise e
+
+    async def _tools_node(self, state: State):
+        return {}
 
     async def _classifier(self, user_msg: str):
         chain = (
