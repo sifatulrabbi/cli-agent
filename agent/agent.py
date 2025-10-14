@@ -10,7 +10,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 from pydantic.types import SecretStr
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
