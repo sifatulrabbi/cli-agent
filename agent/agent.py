@@ -23,10 +23,9 @@ from tools.note_tool import note_tool
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 available_categories = [
-    "information_retrieval",
-    "simple_task",
-    "reasoning_task",
-    "non_reasoning_task",
+    "basic_chat",
+    "low_reasoning_task",
+    "high_reasoning_task",
 ]
 _available_tools = {
     "bash": bash_tool,
@@ -37,6 +36,7 @@ _available_tools = {
 # TODO: add a proper type for the state
 class State(TypedDict):
     messages: Annotated[list, add_messages]
+    category: str
 
 
 class AgentMemory:
@@ -57,6 +57,7 @@ class Agent:
     _api_key: SecretStr
     _classifier_llm: ChatOpenAI
     _fast_llm: ChatOpenAI
+    _low_reasoning_llm: ChatOpenAI
     _reasoning_llm: ChatOpenAI
     _session_id: str
     _memory: AgentMemory
@@ -67,7 +68,7 @@ class Agent:
         self._memory = memory
         self._classifier_llm = ChatOpenAI(
             api_key=self._api_key,
-            model="openai/gpt-4.1-nano",
+            model="gpt-4.1-nano",
             base_url=OPENROUTER_BASE_URL,
         )
         self._fast_llm = ChatOpenAI(
@@ -75,16 +76,17 @@ class Agent:
             model="x-ai/grok-4-fast",
             base_url=OPENROUTER_BASE_URL,
         )
+        self._low_reasoning_llm = ChatOpenAI(
+            api_key=self._api_key,
+            model="openai/gpt-5-mini",
+            base_url=OPENROUTER_BASE_URL,
+            reasoning_effort="low",
+        )
         self._reasoning_llm = ChatOpenAI(
             api_key=self._api_key,
-            # model="z-ai/glm-4.6",
             model="openai/gpt-5-mini",
             base_url=OPENROUTER_BASE_URL,
             reasoning_effort="medium",
-            # reasoning={
-            #     "effort": "medium",
-            #     "summary": "auto",
-            # },
         )
 
         self._graph_builder = StateGraph(State)
@@ -101,8 +103,10 @@ class Agent:
         history.append(HumanMessage(user_msg))
 
         try:
+            category = await self._classifier(history)
             final_result = await self._workflow.ainvoke(
-                {"messages": history}, config=self._default_cfg
+                {"messages": history, "category": category},
+                config=self._default_cfg,
             )
         except Exception as e:
             print("Error in the run() function:", e)
@@ -112,9 +116,7 @@ class Agent:
         await self._memory.save(cast(list[BaseMessage], history))
 
     async def _llm_node(self, state):
-        formatted_prompt = coding_agent_sys_prompt.format(
-            notes="- The project is empty"
-        )
+        formatted_prompt = coding_agent_sys_prompt.format(notes=self._get_notes())
         messages = [SystemMessage(formatted_prompt), *state["messages"]]
 
         result: Any = None
@@ -157,30 +159,48 @@ class Agent:
 
             print(f"[[TOOL]] {tc['name']}")
             print(f"[[TOOL ARGS]] {tc['args']}")
-            print(tool_result)
         return {"messages": tool_msgs}
 
-    async def _classifier(self, user_msg: str):
-        chain = (
-            ChatPromptTemplate.from_messages(
-                [
-                    SystemMessage(classifier_sys_prompt),
-                    HumanMessage(content="{user_msg}"),
-                ]
-            )
-            | self._classifier_llm
+    async def _classifier(self, history: list[BaseMessage]):
+        formatted_history = "<conversation_history>"
+        for msg in history:
+            if msg.type == "user" or msg.type == "human":
+                formatted_history = (
+                    formatted_history
+                    + f"\n<user_message>\n{msg.content}\n</user_message>"
+                )
+            elif msg.type == "assistant" or msg.type == "ai":
+                formatted_history = (
+                    formatted_history
+                    + f"\n<assistant_message>\n{msg.content}\n</assistant_message>"
+                )
+        formatted_history = formatted_history + "\n</conversation_history>"
+
+        res = self._classifier_llm.invoke(
+            [
+                SystemMessage(classifier_sys_prompt),
+                HumanMessage(
+                    content=f"{formatted_history}\n\nNow based on the conversation history above categorize the complexity of the last most <user_message>."
+                ),
+            ]
         )
-        res = chain.invoke({"user_msg": user_msg})
         category = str(res.content if res.content else "").strip()
+        print(f"  [classifier: {category}]")
         for c in available_categories:
             if c in category:
-                print("    category:", c)
                 return c
-        print("    category:", "non_reasoning_task")
-        return "non_reasoning_task"  # fallback
+        return "low_reasoning_task"  # fallback
 
     def _route_to_llm(self, category: str):
-        if category == "reasoning_task":
+        if category == "high_reasoning_task":
             return self._reasoning_llm
-        else:
+        elif category == "low_reasoning_task":
+            return self._low_reasoning_llm
+        else:  # basic_chat
             return self._fast_llm
+
+    def _get_notes(self) -> str:
+        base_path = "/Users/sifatul/coding/cli-agent/agent/tmp/cli-agent-notes.md"
+        with open(base_path) as f:
+            content = f.read()
+        return content

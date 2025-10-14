@@ -93,6 +93,7 @@ class BashToolArgsSchema(BaseModel):
     parse_docstring=False,
 )
 def bash_tool(command: str, timeout: int | None = 30) -> str:
+    print("bash_tool:", command)
     is_safe, reason = _is_command_safe(command)
     if not is_safe:
         return _format_result("", f"SECURITY: Command blocked - {reason}", -1)

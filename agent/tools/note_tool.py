@@ -29,8 +29,23 @@ class NoteToolArgsSchema(BaseModel):
     description="Use this tool to manage your notes.",
 )
 def note_tool(add: list[str] | None = None, update: list[dict[str, Any]] | None = None):
+    print("note_tool:", add, update)
+
+    with open(_base_path, "r") as f:
+        lines = f.readlines()
+
+    if update and len(update) > 0:
+        for u in update:
+            if u["index"] >= len(lines):
+                continue
+            if not u["text"]:
+                lines = [*lines[: (u["index"])], *lines[u["index"] + 1 :]]
+            else:
+                lines[u["index"]] = u["text"]
+    if add and len(add) > 0:
+        [lines.append(line) for line in add]
+
     with open(_base_path, "w") as f:
-        if add:
-            f.writelines(add)
-        # TODO: handle updates
+        f.write("\n".join(lines))
+
     return "Done"

@@ -1,7 +1,9 @@
 import os
 import asyncio
 from dotenv import load_dotenv
+
 from agent import Agent, AgentMemory
+# from multi_step_agent import multi_step_agent
 
 
 async def main():
@@ -15,7 +17,10 @@ async def main():
         if user_msg.strip() in ["q", "/exit", "exit", "quit", "/quit"]:
             exit(0)
         print("AI: ", end="", flush=True)
+
         await agent.run(user_msg)
+        # await multi_step_agent(user_msg)
+
         print()
         print("-" * 80)
         print()
