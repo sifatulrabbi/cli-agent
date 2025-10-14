@@ -101,8 +101,8 @@ async def step_by_step_execution_tool(tasks: list[TaskSchema], message: str):
                             tool_call_id=tc["id"],
                         )
                     )
-                continue
-            break
+            else:
+                break
 
         final_response = (
             final_response
@@ -167,6 +167,6 @@ async def run_decide_then_exec_agent(user_msg: str, memory: list):
                         tool_call_id=tc["id"],
                     )
                 )
-            continue
-        break
+        else:
+            break
     return history

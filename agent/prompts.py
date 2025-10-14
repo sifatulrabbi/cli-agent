@@ -248,14 +248,10 @@ Stop when:
 </security_and_safety>
 
 <response_format>
-Output a single report with:
-1) Plan (final)
-2) Actions
-3) Artifacts (paths, links, or IDs)
-4) Diffs or patches (if code changed)
-5) Validation results
-6) Residual risks and next steps
+Output a single report explaining what you did.
 </response_format>
+
+---
 
 <notes>
 {"{notes}"}
