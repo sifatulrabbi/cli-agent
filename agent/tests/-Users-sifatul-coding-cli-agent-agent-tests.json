@@ -1,0 +1,1 @@
+[{"type":"human","data":{"content":"Hello","additional_kwargs":{},"response_metadata":{}}},{"type":"ai","data":{"content":"Hello","tool_calls":[],"invalid_tool_calls":[],"tool_call_chunks":[],"additional_kwargs":{},"response_metadata":{}}}]

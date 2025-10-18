@@ -166,7 +166,7 @@ ${history[history.length - 1]?.content}
   },
 );
 
-export async function runDecideThenExecAgent(
+export async function runAgent(
   userMsg: string,
   memory: BaseMessage[],
 ): Promise<BaseMessage[]> {

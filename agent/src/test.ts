@@ -1,5 +1,5 @@
 import { BaseMessage } from "@langchain/core/messages";
-import { runDecideThenExecAgent } from "./agents/decide_then_exec.ts";
+import { runAgent } from "./agents/decide_then_exec.ts";
 import readline from "readline";
 import "dotenv/config";
 
@@ -27,7 +27,7 @@ async function main() {
 
     process.stdout.write("AI: ");
 
-    history = await runDecideThenExecAgent(userMsg, history);
+    history = await runAgent(userMsg, history);
 
     console.log();
     console.log("-".repeat(80));
