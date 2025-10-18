@@ -22,15 +22,19 @@ export const SessionDataSchema = z.array(
 
 export class Session {
   private messages: BaseMessage[] = [];
+  private loaded = false;
 
   constructor(
     public readonly pwd: PathLike,
     public readonly cfg: SessionConfig,
-  ) {}
+  ) {
+    this.loaded = false;
+  }
 
   get sessionId() {
     return this.pwd.toString().replaceAll(" ", "_").replaceAll("/", "-");
   }
+
   get filePath() {
     return path.join(this.cfg.sessionRoot.toString(), this.sessionId + ".json");
   }
@@ -38,36 +42,51 @@ export class Session {
   async load() {
     const sessionFile = Bun.file(this.filePath);
     const { error } = await tryCatch(async () => {
-      const data = await sessionFile.json();
+      const data = (await sessionFile.json()) as StoredMessage[];
       this.messages = mapStoredMessagesToChatMessages(data);
     });
     if (error) {
       await sessionFile.write("[]");
       this.messages = [];
     }
+    this.loaded = true;
   }
 
   async save() {
+    this.ensureLoaded();
+
     const sessionFile = Bun.file(this.filePath);
     await sessionFile.write(
       JSON.stringify(this.messages.map((msg) => msg.toDict())),
     );
   }
 
+  ensureLoaded() {
+    if (!this.loaded) {
+      throw new Error("Please load the session first");
+    }
+  }
+
   getHistory() {
+    this.ensureLoaded();
     return this.messages;
   }
 
   async append(msg: BaseMessage) {
+    this.ensureLoaded();
+
     if (msg.id && this.messages.find((m) => m.id === msg.id)) {
       return this.messages;
     }
+
     this.messages.push(msg);
     await this.save();
     return this.messages;
   }
 
   async rewriteHistory(messages: BaseMessage[]) {
+    this.ensureLoaded();
+
     this.messages = messages;
     await this.save();
     return this.messages;
