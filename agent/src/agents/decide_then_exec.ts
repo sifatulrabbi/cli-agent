@@ -6,7 +6,7 @@ import {
   BaseMessage,
   AIMessageChunk,
 } from "@langchain/core/messages";
-import { tool } from "@langchain/core/tools";
+import { type DynamicStructuredTool, tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readFileSync } from "fs";
 import { bashTool } from "../tools/bash_tool.ts";
@@ -26,6 +26,33 @@ const StepByStepArgsSchema = z.object({
 });
 
 const defaultConfig = { recursionLimit: 10 ** 10 };
+const openRouterBaseUrl = "https://openrouter.ai/api/v1";
+
+const qwenCode30B = new ChatOpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  model: "qwen/qwen3-coder-30b-a3b-instruct", //
+  configuration: { baseURL: openRouterBaseUrl },
+});
+const haiku45 = new ChatOpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  model: "anthropic/claude-haiku-4.5",
+  reasoning: { effort: "medium", summary: "detailed" },
+  modelKwargs: {
+    thinking: { type: "enabled", budget_tokens: 2048 },
+  },
+  configuration: { baseURL: openRouterBaseUrl },
+});
+const gpt5Mini = new ChatOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "gpt-5-mini",
+  reasoning: { effort: "medium", summary: "detailed" },
+});
+const kimiK2 = new ChatOpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  model: "moonshotai/kimi-k2-0905",
+  reasoning: { effort: "high", summary: "detailed" },
+  configuration: { baseURL: openRouterBaseUrl },
+});
 
 function getNotes(): string {
   const content = readFileSync(
@@ -43,18 +70,12 @@ const stepByStepExecutionTool = tool(
     }
     console.log("-".repeat(5));
 
-    const availableToolsMap: Record<string, any> = {
+    const availableToolsMap: Record<string, DynamicStructuredTool> = {
       bash: bashTool,
       note: noteTool,
     };
 
-    const llm = new ChatOpenAI({
-      openAIApiKey: process.env.OPENAI_API_KEY,
-      model: "gpt-4.1-mini",
-      // modelKwargs: { reasoning_effort: "medium" },
-    });
-
-    const llmWithTools = llm.bindTools([bashTool, noteTool]);
+    const llmWithTools = kimiK2.bindTools([bashTool, noteTool]);
 
     let finalResponse = "";
 
@@ -65,10 +86,10 @@ const stepByStepExecutionTool = tool(
       ];
 
       while (true) {
-        const stream = await llmWithTools.stream([
-          new SystemMessage(codingWorkerSysPrompt(getNotes())),
-          ...history,
-        ]);
+        const stream = await llmWithTools.stream(
+          [new SystemMessage(codingWorkerSysPrompt(getNotes())), ...history],
+          defaultConfig,
+        );
 
         let aiResponse: AIMessageChunk | null = null;
 
@@ -78,6 +99,14 @@ const stepByStepExecutionTool = tool(
           } else {
             aiResponse = concat(aiResponse, chunk);
           }
+
+          // Display thinking/reasoning content if available
+          if ((chunk as any).reasoning_content) {
+            process.stdout.write(
+              `\n[THINKING] ${(chunk as any).reasoning_content}\n`,
+            );
+          }
+
           process.stdout.write((chunk.content || "").toString());
         }
         console.log();
@@ -141,19 +170,13 @@ export async function runDecideThenExecAgent(
   userMsg: string,
   memory: BaseMessage[],
 ): Promise<BaseMessage[]> {
-  const availableToolsMap: Record<string, any> = {
+  const availableToolsMap: Record<string, DynamicStructuredTool> = {
     bash: bashTool,
     note: noteTool,
     step_by_step_execution: stepByStepExecutionTool,
   };
 
-  const llm = new ChatOpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-5-mini",
-    modelKwargs: { reasoning_effort: "low" },
-  });
-
-  const llmWithTools = llm.bindTools([
+  const llmWithTools = gpt5Mini.bindTools([
     bashTool,
     noteTool,
     stepByStepExecutionTool,
@@ -163,12 +186,13 @@ export async function runDecideThenExecAgent(
   history.push(new HumanMessage(userMsg));
 
   while (true) {
-    const stream = await llmWithTools.stream([
-      new SystemMessage(codingAgentSysPrompt(getNotes())),
-      ...history,
-    ]);
+    const stream = await llmWithTools.stream(
+      [new SystemMessage(codingAgentSysPrompt(getNotes())), ...history],
+      defaultConfig,
+    );
 
     let aiResponse: AIMessageChunk | null = null;
+    let hadReasoning = false;
 
     for await (const chunk of stream) {
       if (!aiResponse) {
@@ -176,7 +200,20 @@ export async function runDecideThenExecAgent(
       } else {
         aiResponse = concat(aiResponse, chunk);
       }
-      process.stdout.write((chunk.content || "").toString());
+
+      chunk.contentBlocks.forEach((b) => {
+        if (typeof b.reasoning === "string" && b.reasoning) {
+          process.stdout.write(b.reasoning);
+          hadReasoning = true;
+        }
+        if (typeof b.text === "string" && b.text) {
+          if (hadReasoning) {
+            process.stdout.write("\n\n");
+            hadReasoning = false;
+          }
+          process.stdout.write(b.text);
+        }
+      });
     }
     console.log();
 
