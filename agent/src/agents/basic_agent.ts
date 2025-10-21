@@ -8,12 +8,14 @@ import {
 import type { DynamicStructuredTool } from "@langchain/core/tools";
 import {
   type AIMessage,
+  AIMessageChunk,
   SystemMessage,
   ToolMessage,
 } from "@langchain/core/messages";
 import { Tools } from "../tools/";
 import { ChatOpenAIResponses } from "@langchain/openai";
 import { basicCodingAgentPrompt } from "../prompts/basic_coding_agent_prompt";
+import { getOpenAIConfig, getOpenRouterConfig } from "../configs";
 
 const BasicAgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
@@ -52,13 +54,18 @@ const availableTools: Record<string, DynamicStructuredTool> = {
 async function llmNode(
   state: BasicAgentState,
 ): Promise<Partial<BasicAgentState>> {
+  const providerCfg = getOpenAIConfig();
   const llm = new ChatOpenAIResponses({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: providerCfg.API_KEY,
+    // model: "qwen/qwen3-coder-30b-a3b-instruct",
     model: "gpt-5-mini",
     reasoning: {
-      effort: "low",
+      effort: "medium",
       summary: "detailed",
     },
+    // configuration: {
+    //   baseURL: providerCfg.BASE_URL,
+    // },
   }).bindTools(Object.values(availableTools));
   const result = await llm.invoke([
     new SystemMessage(basicCodingAgentPrompt),
@@ -117,9 +124,12 @@ export const BasicAgent = new StateGraph(BasicAgentStateAnnotation)
   .addEdge(START, "llm")
   .addEdge("tools", "llm")
   .addConditionalEdges("llm", ({ messages }) => {
-    const lastMsg = messages.at(-1) as AIMessage;
+    const lastMsg = messages.at(-1) as AIMessageChunk;
     if (lastMsg && lastMsg.type === "ai") {
-      if (lastMsg.tool_calls && lastMsg.tool_calls.length > 0) {
+      if (
+        (lastMsg.tool_calls && lastMsg.tool_calls.length > 0) ||
+        (lastMsg.tool_call_chunks && lastMsg.tool_call_chunks.length > 0)
+      ) {
         return "tools";
       }
     }
