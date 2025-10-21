@@ -14,6 +14,8 @@ import { tool, type DynamicStructuredTool } from "@langchain/core/tools";
 import { Tools } from "../tools";
 import z from "zod";
 import { ChatOpenAIResponses } from "@langchain/openai";
+import { codingAgentWithTodosPrompt } from "../prompts/coding_agent_with_todo_prompt";
+import { finalResponseCompilerPrompt } from "../prompts/final_response_compiler_prompt";
 
 export type AgentTodo = {
   index: number;
@@ -24,7 +26,10 @@ export type AgentTodo = {
 
 const StepByStepAgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
-  todoList: Annotation<AgentTodo[]>({ reducer: (x, y) => y ?? x }),
+  todoList: Annotation<AgentTodo[]>({
+    reducer: (x, y) => y ?? x,
+    default: () => [],
+  }),
   actions: Annotation<Record<string, any>[]>({
     reducer: (x, y) => {
       if (!x || !x.length) {
@@ -46,6 +51,7 @@ const StepByStepAgentStateAnnotation = Annotation.Root({
 
       return newList;
     },
+    default: () => [],
   }),
 });
 
@@ -82,7 +88,10 @@ async function llmNode(state: StepByStepAgentState) {
       summary: "detailed",
     },
   }).bindTools(Object.values(availableTools));
-  const result = await llm.invoke([new SystemMessage(""), ...state.messages]);
+  const result = await llm.invoke([
+    new SystemMessage(codingAgentWithTodosPrompt),
+    ...state.messages,
+  ]);
 
   return {
     messages: [result],
@@ -146,7 +155,10 @@ async function finalResponseNode(state: StepByStepAgentState) {
     apiKey: process.env.OPENAI_API_KEY,
     model: "gpt-4.1-mini",
   });
-  const result = await llm.invoke([new SystemMessage(""), ...state.messages]);
+  const result = await llm.invoke([
+    new SystemMessage(finalResponseCompilerPrompt),
+    ...state.messages,
+  ]);
 
   return {
     messages: [result],

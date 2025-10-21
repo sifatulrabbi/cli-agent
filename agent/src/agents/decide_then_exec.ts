@@ -12,7 +12,7 @@ import { z } from "zod";
 import { readFileSync } from "fs";
 import { bashTool } from "../tools/bash_tool.ts";
 import { noteTool } from "../tools/note_tool.ts";
-import { codingAgentSysPrompt, codingWorkerSysPrompt } from "../prompts.ts";
+import { codingAgentSysPrompt, codingWorkerSysPrompt } from "../prompts/index";
 import { concat } from "@langchain/core/utils/stream";
 import { v4 } from "uuid";
 

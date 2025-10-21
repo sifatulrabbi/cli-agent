@@ -13,9 +13,9 @@ const askQuestion = (query: string): Promise<string> => {
 };
 
 while (true) {
-  const userMsg = await askQuestion("USER: ");
+  const userInput = await askQuestion("USER: ");
 
-  if (["q", "/exit", "exit", "quit", "/quit"].includes(userMsg.trim())) {
+  if (["q", "/exit", "exit", "quit", "/quit"].includes(userInput.trim())) {
     rl.close();
     process.exit(0);
   }
@@ -24,14 +24,17 @@ while (true) {
   console.log("AI:");
 
   const stream = await workflow.stream(
-    { userInput: "" },
-    { streamMode: "updates" },
+    { userInput: userInput },
+    { streamMode: "messages" },
   );
+  const chunks: any[] = [];
   for await (const step of stream) {
+    chunks.push(step);
     console.log(step);
   }
 
   console.log();
+  console.log("total streamed chunks:", chunks.length);
   console.log("-".repeat(80));
   console.log();
 }

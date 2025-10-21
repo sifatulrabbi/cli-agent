@@ -13,6 +13,7 @@ import {
 } from "@langchain/core/messages";
 import { Tools } from "../tools/";
 import { ChatOpenAIResponses } from "@langchain/openai";
+import { basicCodingAgentPrompt } from "../prompts/basic_coding_agent_prompt";
 
 const BasicAgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
@@ -37,6 +38,7 @@ const BasicAgentStateAnnotation = Annotation.Root({
 
       return newList;
     },
+    default: () => [],
   }),
 });
 
@@ -58,7 +60,10 @@ async function llmNode(
       summary: "detailed",
     },
   }).bindTools(Object.values(availableTools));
-  const result = await llm.invoke([new SystemMessage(""), ...state.messages]);
+  const result = await llm.invoke([
+    new SystemMessage(basicCodingAgentPrompt),
+    ...state.messages,
+  ]);
 
   return {
     messages: [result],

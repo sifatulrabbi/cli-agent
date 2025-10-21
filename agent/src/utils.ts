@@ -23,26 +23,9 @@ export async function timing<T>(
   }
 
   const endTime = performance.now();
-  const elapsedMs = endTime - startTime;
-
-  // Format time with appropriate unit
-  let timeStr: string;
-  if (elapsedMs < 1000) {
-    // Less than 1 second: show in milliseconds
-    timeStr = `${Math.round(elapsedMs)}ms`;
-  } else if (elapsedMs < 60000) {
-    // Less than 1 minute: show in seconds
-    const seconds = elapsedMs / 1000;
-    timeStr = `${seconds}s`;
-  } else {
-    // 1 minute or more: show in minutes and seconds
-    const totalSeconds = Math.round(elapsedMs / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    timeStr = `${minutes}min ${seconds}s`;
-  }
-
-  console.log(`>>> [${name}] took ${timeStr} <<<`);
+  console.log(
+    `>>> [${name}] took ${((endTime - startTime) / 1000).toFixed(2)} seconds <<<`,
+  );
 
   return res;
 }

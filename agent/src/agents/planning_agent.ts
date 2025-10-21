@@ -5,7 +5,7 @@ import {
   StateGraph,
   Annotation,
 } from "@langchain/langgraph";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatOpenAIResponses } from "@langchain/openai";
 import {
   AIMessage,
   SystemMessage,
@@ -102,10 +102,9 @@ function extractMessageText(message: AIMessage): string {
 }
 
 async function llmNode(state: PlanningAgentState) {
-  const llm = new ChatOpenAI({
+  const llm = new ChatOpenAIResponses({
     apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-5",
-    useResponsesApi: true,
+    model: "gpt-5-mini",
     reasoning: {
       effort: "medium",
       summary: "detailed",
