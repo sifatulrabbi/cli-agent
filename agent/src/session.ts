@@ -1,6 +1,5 @@
 import type { PathLike } from "bun";
 import path from "path";
-import { z } from "zod";
 import {
   mapStoredMessagesToChatMessages,
   type BaseMessage,
@@ -8,19 +7,26 @@ import {
 } from "@langchain/core/messages";
 import { tryCatch } from "./utils";
 
+export type SessionDataAction = {
+  index: string;
+  title: string;
+  displayContent: string;
+  additionalData: Record<string, any>;
+  streaming: boolean;
+};
+
+export type SessionData = {
+  id: string;
+  actions: SessionDataAction[];
+  messages: StoredMessage[];
+};
+
 export type SessionConfig = {
   sessionRoot: PathLike;
 };
 
-export const SessionDataSchema = z.array(
-  z.object({
-    id: z.string(),
-    type: z.enum(["ai", "user", "tool"]),
-    rawJSON: z.string(),
-  }),
-);
-
 export class Session {
+  private actions: SessionDataAction[] = [];
   private messages: BaseMessage[] = [];
   private loaded = false;
 
@@ -42,12 +48,19 @@ export class Session {
   async load() {
     const sessionFile = Bun.file(this.filePath);
     const { error } = await tryCatch(async () => {
-      const data = (await sessionFile.json()) as StoredMessage[];
-      this.messages = mapStoredMessagesToChatMessages(data);
+      const data = (await sessionFile.json()) as SessionData;
+      this.messages = mapStoredMessagesToChatMessages(data.messages);
+      this.actions = data.actions;
     });
     if (error) {
-      await sessionFile.write("[]");
+      const s: SessionData = {
+        id: this.sessionId,
+        actions: [],
+        messages: [],
+      };
+      await sessionFile.write(JSON.stringify(s));
       this.messages = [];
+      this.actions = [];
     }
     this.loaded = true;
   }
@@ -57,7 +70,11 @@ export class Session {
 
     const sessionFile = Bun.file(this.filePath);
     await sessionFile.write(
-      JSON.stringify(this.messages.map((msg) => msg.toDict())),
+      JSON.stringify({
+        id: this.sessionId,
+        actions: this.actions,
+        messages: this.messages.map((msg) => msg.toDict()),
+      }),
     );
   }
 
@@ -65,6 +82,11 @@ export class Session {
     if (!this.loaded) {
       throw new Error("Please load the session first");
     }
+  }
+
+  getActions() {
+    this.ensureLoaded();
+    return this.actions;
   }
 
   getHistory() {
@@ -84,11 +106,17 @@ export class Session {
     return this.messages;
   }
 
-  async rewriteHistory(messages: BaseMessage[]) {
+  async rewriteSession({
+    actions,
+    messages,
+  }: {
+    actions: SessionDataAction[];
+    messages: BaseMessage[];
+  }) {
     this.ensureLoaded();
 
     this.messages = messages;
+    this.actions = actions;
     await this.save();
-    return this.messages;
   }
 }

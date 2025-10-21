@@ -3,7 +3,7 @@ import { Session } from "../src/session";
 
 const session = new Session(__dirname, { sessionRoot: __dirname });
 await session.load();
-await session.rewriteHistory([]);
+await session.rewriteSession({ actions: [], messages: [] });
 console.log("---\n", session.getHistory());
 
 await session.append(new HumanMessage({ content: "Hello" }));

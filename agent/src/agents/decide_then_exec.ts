@@ -6,6 +6,7 @@ import {
   BaseMessage,
   AIMessageChunk,
 } from "@langchain/core/messages";
+import { type Session } from "../session";
 import { type DynamicStructuredTool, tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readFileSync } from "fs";
@@ -13,6 +14,7 @@ import { bashTool } from "../tools/bash_tool.ts";
 import { noteTool } from "../tools/note_tool.ts";
 import { codingAgentSysPrompt, codingWorkerSysPrompt } from "../prompts.ts";
 import { concat } from "@langchain/core/utils/stream";
+import { v4 } from "uuid";
 
 const TaskSchema = z.object({
   id: z.number().describe("Incremental ID for the task, starts from 1."),
@@ -62,86 +64,150 @@ function getNotes(): string {
   return content;
 }
 
-const stepByStepExecutionTool = tool(
-  async ({ tasks }: any) => {
-    console.log("\nHandling tasks step by step:");
-    for (const t of tasks) {
-      console.log(`[${t.id}]`, t.description);
+async function basicAgentLoop(
+  {
+    session,
+    model,
+    tools,
+    systemPromptBuilder,
+  }: {
+    systemPromptBuilder: () => string;
+    session: Session;
+    model: ChatOpenAI;
+    tools: Record<string, DynamicStructuredTool>;
+  },
+  streamCb: (msg: BaseMessage) => Promise<void>,
+) {
+  const modelWithTools = model.bindTools(Object.values(tools));
+
+  while (true) {
+    const stream = await modelWithTools.stream(
+      [new SystemMessage(systemPromptBuilder()), ...session.getHistory()],
+      defaultConfig,
+    );
+
+    let aiResponse: AIMessageChunk | null = null;
+
+    for await (const chunk of stream) {
+      if (!aiResponse) {
+        aiResponse = chunk;
+      } else {
+        aiResponse = concat(aiResponse, chunk);
+      }
+      await streamCb(aiResponse);
     }
-    console.log("-".repeat(5));
 
-    const availableToolsMap: Record<string, DynamicStructuredTool> = {
-      bash: bashTool,
-      note: noteTool,
-    };
+    if (!aiResponse) {
+      break;
+    }
 
-    const llmWithTools = kimiK2.bindTools([bashTool, noteTool]);
+    await session.append(aiResponse);
+    await streamCb(aiResponse);
 
-    let finalResponse = "";
+    if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+      for (const tc of aiResponse.tool_calls) {
+        console.log(`[TOOL: ${tc.name}]`, tc.args);
+        const toolFunc = tools[tc.name];
+        let toolResult: string;
 
-    for (const task of tasks) {
-      console.log(`\n--- Working on task [${task.id}] ---`);
-      const history: BaseMessage[] = [
-        new HumanMessage(`Handle this task:\n\n${task.description}`),
-      ];
-
-      while (true) {
-        const stream = await llmWithTools.stream(
-          [new SystemMessage(codingWorkerSysPrompt(getNotes())), ...history],
-          defaultConfig,
-        );
-
-        let aiResponse: AIMessageChunk | null = null;
-
-        for await (const chunk of stream) {
-          if (!aiResponse) {
-            aiResponse = chunk;
-          } else {
-            aiResponse = concat(aiResponse, chunk);
-          }
-
-          // Display thinking/reasoning content if available
-          if ((chunk as any).reasoning_content) {
-            process.stdout.write(
-              `\n[THINKING] ${(chunk as any).reasoning_content}\n`,
-            );
-          }
-
-          process.stdout.write((chunk.content || "").toString());
+        if (!toolFunc) {
+          toolResult = "Invalid tool name! Please use a valid tool.";
+          console.log("xxx Invalid tool call! xxx");
+        } else {
+          toolResult = await toolFunc.invoke(tc.args);
         }
-        console.log();
 
-        if (!aiResponse) break;
+        await session.append(
+          new ToolMessage({
+            content: toolResult,
+            name: tc.name,
+            tool_call_id: tc.id!,
+          }),
+        );
+        await streamCb(aiResponse);
+      }
+    } else {
+      break;
+    }
+  }
+}
 
-        history.push(aiResponse);
+const stepByStepExecutionTool = (
+  streamCb: (msg: BaseMessage) => Promise<void>,
+) =>
+  tool(
+    async ({ tasks }: any) => {
+      const availableToolsMap: Record<string, DynamicStructuredTool> = {
+        bash: bashTool,
+        note: noteTool,
+      };
+      const llmWithTools = kimiK2.bindTools(Object.values(availableToolsMap));
 
-        if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
-          for (const tc of aiResponse.tool_calls) {
-            console.log(`[TOOL: ${tc.name}]`, tc.args);
-            const toolFunc = availableToolsMap[tc.name];
-            let toolResult: string;
+      let finalResponse = "";
 
-            if (!toolFunc) {
-              toolResult = "Invalid tool name! Please use a valid tool.";
-              console.log("xxx Invalid tool call! xxx");
+      for (const task of tasks) {
+        console.log(`\n--- Working on task [${task.id}] ---`);
+        const history: BaseMessage[] = [
+          new HumanMessage(`Handle this task:\n\n${task.description}`),
+        ];
+
+        while (true) {
+          const stream = await llmWithTools.stream(
+            [new SystemMessage(codingWorkerSysPrompt(getNotes())), ...history],
+            defaultConfig,
+          );
+
+          let aiResponse: AIMessageChunk | null = null;
+
+          for await (const chunk of stream) {
+            if (!aiResponse) {
+              aiResponse = chunk;
             } else {
-              toolResult = await toolFunc.invoke(tc.args);
+              aiResponse = concat(aiResponse, chunk);
             }
 
-            history.push(
-              new ToolMessage({
-                content: toolResult,
-                name: tc.name,
-                tool_call_id: tc.id!,
-              }),
-            );
-          }
-        } else {
-          break;
-        }
-      }
+            // Display thinking/reasoning content if available
+            if ((chunk as any).reasoning_content) {
+              process.stdout.write(
+                `\n[THINKING] ${(chunk as any).reasoning_content}\n`,
+              );
+            }
 
-      finalResponse += `<task id="${task.id}">
+            process.stdout.write((chunk.content || "").toString());
+          }
+          console.log();
+
+          if (!aiResponse) break;
+
+          history.push(aiResponse);
+
+          if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+            for (const tc of aiResponse.tool_calls) {
+              console.log(`[TOOL: ${tc.name}]`, tc.args);
+              const toolFunc = availableToolsMap[tc.name];
+              let toolResult: string;
+
+              if (!toolFunc) {
+                toolResult = "Invalid tool name! Please use a valid tool.";
+                console.log("xxx Invalid tool call! xxx");
+              } else {
+                toolResult = await toolFunc.invoke(tc.args);
+              }
+
+              history.push(
+                new ToolMessage({
+                  content: toolResult,
+                  name: tc.name,
+                  tool_call_id: tc.id!,
+                }),
+              );
+            }
+          } else {
+            break;
+          }
+        }
+
+        finalResponse += `<task id="${task.id}">
 <description>
 ${task.description}
 </description>
@@ -150,49 +216,48 @@ ${history[history.length - 1]?.content}
 </result>
 </task>
 `;
-    }
+      }
 
-    return finalResponse;
-  },
-  {
-    name: "step_by_step_execution",
-    description:
-      "Invoke this tool to handle complex or multi-stage tasks that require deep reasoning, " +
-      "precise planning, or many modifications — such as feature implementation, debugging, " +
-      "bug fixing, optimization, or multi-file refactors. " +
-      "When used, this tool will spawn a specialized version of the agent to execute the task " +
-      "step by step with full autonomy and all tool access.",
-    schema: StepByStepArgsSchema,
-  },
-);
+      return finalResponse;
+    },
+    {
+      name: "step_by_step_execution",
+      description:
+        "Invoke this tool to handle complex or multi-stage tasks that require deep reasoning, " +
+        "precise planning, or many modifications — such as feature implementation, debugging, " +
+        "bug fixing, optimization, or multi-file refactors. " +
+        "When used, this tool will spawn a specialized version of the agent to execute the task " +
+        "step by step with full autonomy and all tool access.",
+      schema: StepByStepArgsSchema,
+    },
+  );
 
-export async function runAgent(
-  userMsg: string,
-  memory: BaseMessage[],
-): Promise<BaseMessage[]> {
+export async function runDecideAndExecAgent(
+  { userInput, session }: { userInput: string; session: Session },
+  streamCb: (msg: BaseMessage) => Promise<void>,
+) {
   const availableToolsMap: Record<string, DynamicStructuredTool> = {
     bash: bashTool,
     note: noteTool,
-    step_by_step_execution: stepByStepExecutionTool,
+    step_by_step_execution: stepByStepExecutionTool(streamCb),
   };
+  const llmWithTools = gpt5Mini.bindTools(Object.values(availableToolsMap));
 
-  const llmWithTools = gpt5Mini.bindTools([
-    bashTool,
-    noteTool,
-    stepByStepExecutionTool,
-  ]);
+  const userMsg = new HumanMessage({ id: v4(), content: userInput });
+  await session.append(userMsg);
+  await streamCb(userMsg);
 
-  const history = memory;
-  history.push(new HumanMessage(userMsg));
-
-  while (true) {
+  let done = false;
+  while (!done) {
     const stream = await llmWithTools.stream(
-      [new SystemMessage(codingAgentSysPrompt(getNotes())), ...history],
+      [
+        new SystemMessage(codingAgentSysPrompt(getNotes())),
+        ...session.getHistory(),
+      ],
       defaultConfig,
     );
 
     let aiResponse: AIMessageChunk | null = null;
-    let hadReasoning = false;
 
     for await (const chunk of stream) {
       if (!aiResponse) {
@@ -200,26 +265,23 @@ export async function runAgent(
       } else {
         aiResponse = concat(aiResponse, chunk);
       }
+      await streamCb(aiResponse);
 
-      chunk.contentBlocks.forEach((b) => {
-        if (typeof b.reasoning === "string" && b.reasoning) {
-          process.stdout.write(b.reasoning);
-          hadReasoning = true;
-        }
-        if (typeof b.text === "string" && b.text) {
-          if (hadReasoning) {
-            process.stdout.write("\n\n");
-            hadReasoning = false;
-          }
-          process.stdout.write(b.text);
-        }
-      });
+      // chunk.contentBlocks.forEach((b) => {
+      //   if (typeof b.reasoning === "string" && b.reasoning) {
+      //   }
+      //   if (typeof b.text === "string" && b.text) {
+      //   }
+      // });
     }
-    console.log();
 
-    if (!aiResponse) break;
+    if (!aiResponse) {
+      done = true;
+      break;
+    }
 
-    history.push(aiResponse);
+    await session.append(aiResponse);
+    await streamCb(aiResponse);
 
     if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
       for (const tc of aiResponse.tool_calls) {
@@ -234,18 +296,18 @@ export async function runAgent(
           toolResult = await toolFunc.invoke(tc.args);
         }
 
-        history.push(
+        await session.append(
           new ToolMessage({
             content: toolResult,
             name: tc.name,
             tool_call_id: tc.id!,
           }),
         );
+        await streamCb(aiResponse);
       }
     } else {
+      done = true;
       break;
     }
   }
-
-  return history;
 }
