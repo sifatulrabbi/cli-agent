@@ -109,7 +109,7 @@ const BashToolArgsSchema = z.object({
 
 export const bashTool = tool(
   async ({ command, timeout = 30 }: any) => {
-    console.log("bash_tool:", command);
+    console.log("bash:", command);
 
     const { safe, reason } = isCommandSafe(command);
     if (!safe) {

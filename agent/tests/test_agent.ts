@@ -1,7 +1,7 @@
 import readline from "readline";
 import { workflow } from "../src/workflow";
 import { concat } from "@langchain/core/utils/stream";
-import type { BaseMessage, StoredMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -73,7 +73,11 @@ while (true) {
 
   await Bun.write(
     "./tests/log-dump.ignore.json",
-    JSON.stringify(chunks, undefined, 2),
+    JSON.stringify(
+      chunks.map((msg) => msg.toDict()),
+      undefined,
+      2,
+    ),
   );
 
   console.log();

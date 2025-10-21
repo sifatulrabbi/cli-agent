@@ -5,7 +5,7 @@ import {
   MessagesAnnotation,
   StateGraph,
 } from "@langchain/langgraph";
-import type { DynamicStructuredTool } from "@langchain/core/tools";
+import { tool, type DynamicStructuredTool } from "@langchain/core/tools";
 import {
   type AIMessage,
   AIMessageChunk,
@@ -15,10 +15,15 @@ import {
 import { Tools } from "../tools/";
 import { ChatOpenAIResponses } from "@langchain/openai";
 import { basicCodingAgentPrompt } from "../prompts/basic_coding_agent_prompt";
-import { getOpenAIConfig, getOpenRouterConfig } from "../configs";
+import { getOpenRouterConfig } from "../configs";
+import z from "zod";
 
 const BasicAgentStateAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
+  handover: Annotation<boolean>({
+    reducer: (x, y) => y ?? x,
+    default: () => false,
+  }),
   actions: Annotation<Record<string, any>[]>({
     reducer: (x, y) => {
       if (!x || !x.length) {
@@ -46,26 +51,28 @@ const BasicAgentStateAnnotation = Annotation.Root({
 
 export type BasicAgentState = typeof BasicAgentStateAnnotation.State;
 
+const handoverTool = tool(() => "Done", {
+  name: "handover",
+  description:
+    "Use this tool to handover the request to the complex task handling agent.",
+  schema: z.object({ handover: z.boolean() }),
+});
+
 const availableTools: Record<string, DynamicStructuredTool> = {
   [Tools.bashTool.name]: Tools.bashTool,
-  [Tools.noteTool.name]: Tools.noteTool,
+  [handoverTool.name]: handoverTool,
 };
 
 async function llmNode(
   state: BasicAgentState,
 ): Promise<Partial<BasicAgentState>> {
-  const providerCfg = getOpenAIConfig();
+  const providerCfg = getOpenRouterConfig();
   const llm = new ChatOpenAIResponses({
     apiKey: providerCfg.API_KEY,
-    // model: "qwen/qwen3-coder-30b-a3b-instruct",
-    model: "gpt-5-mini",
-    reasoning: {
-      effort: "medium",
-      summary: "detailed",
+    model: "x-ai/grok-code-fast-1",
+    configuration: {
+      baseURL: providerCfg.BASE_URL,
     },
-    // configuration: {
-    //   baseURL: providerCfg.BASE_URL,
-    // },
   }).bindTools(Object.values(availableTools));
   const result = await llm.invoke([
     new SystemMessage(basicCodingAgentPrompt),
@@ -118,11 +125,17 @@ async function toolsNode(
   };
 }
 
+async function handoverNode(_state: BasicAgentState) {
+  return {
+    handover: true,
+  };
+}
+
 export const BasicAgent = new StateGraph(BasicAgentStateAnnotation)
   .addNode("llm", llmNode)
   .addNode("tools", toolsNode)
+  .addNode("handover_request", handoverNode)
   .addEdge(START, "llm")
-  .addEdge("tools", "llm")
   .addConditionalEdges("llm", ({ messages }) => {
     const lastMsg = messages.at(-1) as AIMessageChunk;
     if (lastMsg && lastMsg.type === "ai") {
@@ -130,9 +143,15 @@ export const BasicAgent = new StateGraph(BasicAgentStateAnnotation)
         (lastMsg.tool_calls && lastMsg.tool_calls.length > 0) ||
         (lastMsg.tool_call_chunks && lastMsg.tool_call_chunks.length > 0)
       ) {
+        const toolCalls = lastMsg.tool_calls || lastMsg.tool_call_chunks;
+        if (toolCalls!.find((tc) => tc.name === handoverTool.name)) {
+          return "handover_request";
+        }
         return "tools";
       }
     }
     return END;
   })
+  .addEdge("tools", "llm")
+  .addEdge("handover_request", END)
   .compile({ name: "BasicAgent" });
