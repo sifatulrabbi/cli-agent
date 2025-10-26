@@ -1,6 +1,6 @@
 import readline from "readline";
-import { workflow } from "../src/workflow";
 import { concat } from "@langchain/core/utils/stream";
+import { workflow } from "../src/workflow";
 import type { BaseMessage } from "@langchain/core/messages";
 
 const rl = readline.createInterface({

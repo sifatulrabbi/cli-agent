@@ -13,7 +13,7 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import { Tools } from "../tools/";
-import { ChatOpenAIResponses } from "@langchain/openai";
+import { ChatOpenAI } from "@langchain/openai";
 import { basicCodingAgentPrompt } from "../prompts/basic_coding_agent_prompt";
 import { getOpenRouterConfig } from "../configs";
 import z from "zod";
@@ -67,9 +67,9 @@ async function llmNode(
   state: BasicAgentState,
 ): Promise<Partial<BasicAgentState>> {
   const providerCfg = getOpenRouterConfig();
-  const llm = new ChatOpenAIResponses({
+  const llm = new ChatOpenAI({
     apiKey: providerCfg.API_KEY,
-    model: "x-ai/grok-code-fast-1",
+    model: "anthropic/claude-haiku-4.5",
     configuration: {
       baseURL: providerCfg.BASE_URL,
     },
