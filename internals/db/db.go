@@ -1,63 +1,73 @@
 package db
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"time"
 )
 
-var DBPath = "/tmp/cli-agent.db"
+const (
+	MsgRoleAI     = "ai"
+	MsgRoleUser   = "human"
+	MsgRoleTool   = "tool"
+	MsgRoleSystem = "system"
+)
 
-func init() {
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath != "" {
-		DBPath = dbPath
-	}
-	if err := AutoMigrate(); err != nil {
-		log.Fatalln("Failed to migrate the database:", err)
-	}
+type ToolCall struct {
+	Name   string `json:"name"`
+	CallID string `json:"call_id"`
+	Args   string `json:"args"`
 }
 
-// gormDB is the shared GORM connection. Use Get() to open/lazy-init.
-var gormDB *gorm.DB
+type Usage struct {
+	Input  int64 `json:"input"`
+	Output int64 `json:"output"`
+	Total  int64 `json:"total"`
+}
 
-// Get returns a singleton *gorm.DB connected to the SQLite database at DBPath.
-// It lazily opens the connection and ensures the parent directory exists.
-func Get() (*gorm.DB, error) {
-	if gormDB != nil {
-		return gormDB, nil
-	}
+type HistoryMessage struct {
+	Role       string     `json:"role"`
+	Reasoning  string     `json:"reasoning"`
+	ToolCalls  []ToolCall `json:"toolCalls"`
+	Text       string     `json:"text"`
+	ToolCallID string     `json:"toolCallId"`
+	RawJSON    string     `json:"rawJson"`
+	Usage      *Usage     `json:"usage"`
+}
 
-	// Ensure parent directory exists for the DB file path
-	if dir := filepath.Dir(DBPath); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create db dir: %w", err)
+func (hm HistoryMessage) IsAI() bool { return hm.Role == MsgRoleAI }
+
+func (hm HistoryMessage) IsUser() bool { return hm.Role == MsgRoleUser }
+
+func (hm HistoryMessage) IsTool() bool { return hm.Role == MsgRoleTool }
+
+func (hm HistoryMessage) IsSystem() bool { return hm.Role == MsgRoleSystem }
+
+type AgentHistory struct {
+	SessionID   string           `json:"sessionId"`
+	WorkingPath string           `json:"workingPath"`
+	ModelName   string           `json:"modelName"` // e.g. gpt-5/medium
+	CreatedAt   time.Time        `json:"createdAt"`
+	UpdatedAt   time.Time        `json:"updatedAt"`
+	Messages    []HistoryMessage `json:"messages"`
+}
+
+func (ah AgentHistory) GetSessionUsage() Usage {
+	totalIn := int64(0)
+	totalOut := int64(0)
+	total := int64(0)
+	for _, msg := range ah.Messages {
+		if msg.Usage != nil {
+			totalIn += msg.Usage.Input
+			totalOut += msg.Usage.Output
+			total += msg.Usage.Total
 		}
 	}
-
-	db, err := gorm.Open(sqlite.Open(DBPath), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite db: %w", err)
-	}
-
-	// Keep a small pool, SQLite works best with fewer writers
-	if sqlDB, err := db.DB(); err == nil {
-		sqlDB.SetMaxOpenConns(1)
-	}
-
-	gormDB = db
-	return gormDB, nil
+	return Usage{Input: totalIn, Output: totalOut, Total: total}
 }
 
-// AutoMigrate is a small helper to migrate any provided models.
-func AutoMigrate(models ...any) error {
-	db, err := Get()
-	if err != nil {
-		return err
-	}
-	return db.AutoMigrate(models...)
+func GetHistory(workingPath string) (*AgentHistory, error) {
+	return nil, nil
+}
+
+func SaveHistory(history *AgentHistory) error {
+	return nil
 }

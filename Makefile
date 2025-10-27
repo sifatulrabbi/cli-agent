@@ -6,3 +6,5 @@ local-build:
 dev:
 	go build && go install && GOENV=dev cli-agent
 
+server-dev:
+	python3 ./server/main.py

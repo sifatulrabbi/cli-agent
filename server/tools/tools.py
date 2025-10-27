@@ -1,0 +1,156 @@
+from typing import Optional
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+class ReadFile(BaseModel):
+    filePath: str = Field(
+        ...,
+        description="The path of the file. Make sure to include the entire path from ./ till the file. Must be provided.",
+    )
+    startLine: Optional[int] = Field(
+        1,
+        description="The start line for the reading operation. No need to pass a value when reading the entire file.",
+    )
+    endLine: Optional[int] = Field(
+        0,
+        description="The end line for the reading operation. No need to pass a value when reading the entire file.",
+    )
+
+
+class ReadFiles(BaseModel):
+    reads: list[ReadFile] = Field(..., description="A list of read operations.")
+
+
+@tool(
+    "read_files",
+    args_schema=ReadFiles,
+    description="Use this to read multiple files at once, safely, and securely. This is a must use for reading files of the project!",
+)
+def read_files_tool():
+    return
+
+
+class AppendFileInsert(BaseModel):
+    insertAfter: int = Field(
+        ..., description="The line number after which to insert the content."
+    )
+    content: str = Field(..., description="The content to insert")
+
+
+class AppendFile(BaseModel):
+    filePath: str = Field(..., description="The path of the file to insert into")
+    inserts: list[AppendFileInsert]
+
+
+@tool(
+    "append_file",
+    args_schema=AppendFile,
+    description=(
+        "Insert content into a text file in the project. Must provide the full path. "
+        "(Note: the full path can be obtained by using the 'list_files' tool.)"
+    ),
+)
+def append_file_tool():
+    return
+
+
+class PatchFilePatch(BaseModel):
+    startLine: int = Field(
+        ..., description="The start line of the range to replace (1-based)"
+    )
+    endLine: int = Field(
+        ..., description="The end line of the range to replace (1-based)"
+    )
+    content: str = Field(
+        ...,
+        description="Replacement content. Use empty string to delete the specified range.",
+    )
+
+
+class PatchFile(BaseModel):
+    filePath: str = Field(..., description="The path of the file to patch")
+    patches: list[PatchFilePatch]
+
+
+@tool(
+    "patch_file",
+    args_schema=PatchFile,
+    description=(
+        "Patch a text file by replacing existing line ranges only. "
+        "Insertion is not supported here; use 'append_file' for insertions. "
+        "Must provide the full path (obtainable via 'list_files' tool)."
+    ),
+)
+def patch_file_tool():
+    return
+
+
+class GrepArgs(BaseModel):
+    cmd: str = Field(
+        ...,
+        description=(
+            "The command to run (e.g., grep -R -n 'pattern' .). "
+            "No need to provide any exclude patterns."
+        ),
+    )
+
+
+@tool(
+    "grep",
+    args_schema=GrepArgs,
+    description="Perform a grep action using the unix grep tool.",
+)
+def grep_tool():
+    return
+
+
+class ListFilesArgs(BaseModel):
+    pass
+
+
+@tool(
+    "ls",
+    args_schema=ListFilesArgs,
+    description=(
+        "List all files and directories in the WorkingPath. "
+        "Output is wrapped in <all_files_and_dirs> and paths start with './'. "
+        "Entries respect .gitignore patterns."
+    ),
+)
+def list_files_tool():
+    return
+
+
+class AddTodosArg(BaseModel):
+    todos: list[str] = Field(
+        ..., description="List of tasks that needs to be performed. Explain in detail."
+    )
+
+
+@tool(
+    "add_todo",
+    args_schema=AddTodosArg,
+    description=(
+        "Create a list of tasks that needs to be performed for a given request. "
+        "Do not return the same task twice and only return new tasks that you want to add."
+    ),
+)
+def add_todo_tool():
+    return
+
+
+class MarkTodoAsDoneArg(BaseModel):
+    ids: list[int] = Field(..., description="Ids of the todos to mark as done.")
+
+
+@tool(
+    "mark_todo_as_done",
+    args_schema=MarkTodoAsDoneArg,
+    description=(
+        "Use this tool to mark a todo as done. "
+        "Only provide the ids of the todo that you want to mark as done."
+    ),
+)
+def mark_todo_as_done_tool():
+    return

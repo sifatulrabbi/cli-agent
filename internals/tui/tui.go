@@ -11,253 +11,235 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/sifatulrabbi/cli-agent/internals/agent"
-	"github.com/sifatulrabbi/cli-agent/internals/configs"
-	"github.com/sifatulrabbi/cli-agent/internals/utils"
+	"github.com/sifatulrabbi/cli-agent/internals/db"
 )
 
-type (
-	ErrMsg         string
-	InfoMsg        string
-	streamChunkMsg string
-	streamDoneMsg  struct{}
-	ClearStatusMsg struct{}
-)
-
-const (
-	ROOT_PADDING_X = 2
-	ROOT_PADDING_Y = 1
-)
-
-type model struct {
-	height int
-	width  int
-
-	ch <-chan string
+type TuiModel struct {
+	ti textarea.Model
+	vp viewport.Model
+	sp spinner.Model
 
 	busy       bool
 	busyStatus string
-	status     string
+	logMessage string
 
-	buf          strings.Builder
-	input        textarea.Model
-	spin         spinner.Model
-	vp           viewport.Model
-	inputMaxRows int
+	chatHistory string
+
+	escPressed bool
+
+	maxWidth     int
+	maxHeight    int
+	inputHeight  int
+	headerHeight int
+	footerHeight int
+	statusHeight int
+
+	agent *agent.CLIAgent
 }
 
-func New() model {
-	ti := textarea.New()
-	ti.Placeholder = getInputPlaceholder()
-	ti.Focus() // focusing by default.
-	ti.SetHeight(1)
-	ti.ShowLineNumbers = false
-
-	vp := viewport.New(1, 1)
-	vp.MouseWheelEnabled = true
-	// Disable all keyboard scrolling/navigation in the viewport; allow mouse only.
-	vp.KeyMap = viewport.KeyMap{}
-
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-
-	return model{
+func New() TuiModel {
+	m := TuiModel{
+		ti:           textarea.New(),
+		vp:           viewport.New(1, 1),
+		sp:           spinner.New(),
+		maxWidth:     9,
+		maxHeight:    9,
+		inputHeight:  1,
+		headerHeight: 1,
+		footerHeight: 2,
+		statusHeight: 2,
 		busy:         false,
-		busyStatus:   "",
-		status:       "",
-		buf:          strings.Builder{},
-		input:        ti,
-		spin:         sp,
-		vp:           vp,
-		inputMaxRows: 10,
+		agent:        agent.NewAgent(&db.AgentHistory{}),
 	}
+
+	m.ti.ShowLineNumbers = false
+	m.ti.Placeholder = "Enter your text"
+	m.ti.Focus()
+	m.ti.SetHeight(m.inputHeight)
+	m.vp.MouseWheelEnabled = true
+	m.sp.Spinner = spinner.Points
+
+	return m
 }
 
-func (m model) Init() tea.Cmd {
+func (m TuiModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.input.Placeholder = getInputPlaceholder()
+func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := []tea.Cmd{}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-
-		m.vp.Width = max(m.width-ROOT_PADDING_X*2, 1)
-		// Input width stays within the bordered box, leave room for padding/border
-		m.input.SetWidth(max(m.width-ROOT_PADDING_X*2-3*2-2, 1))
-		// Adjust viewport height based on current input rows (cap at 10)
-		visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-		if visibleRows < 1 {
-			visibleRows = 1
-		}
-		m.input.SetHeight(visibleRows)
-		m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
-
-		log.Printf("Max width: %d, viewport width: %d\n", m.width, m.vp.Width)
+		m.maxWidth, m.maxHeight = msg.Width, msg.Height
+		m.ti.SetWidth(m.maxWidth - 4)
+		m.ti.SetHeight(m.inputHeight)
+		m.updateHeights()
 		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
-
-		case "/exit", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
 
-		case "esc":
-			m.input.SetValue("")
-			return m, nil
-
-        case "ctrl+j":
-            // Insert a newline at the cursor and resize up to max height.
-            m.input.InsertString("\n")
-            visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-            if visibleRows < 1 {
-                visibleRows = 1
-            }
-            m.input.SetHeight(visibleRows)
-			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
-			return m, nil
+		case "up", "down":
+			return m, m.updateTextinput(msg)
 
 		case "enter":
 			if m.busy {
 				return m, nil
 			}
 
-			raw := m.input.Value()
-			if strings.TrimSpace(raw) == "" {
+			v := strings.TrimSpace(m.ti.Value())
+			switch v {
+			case "":
 				return m, nil
-			}
-			// Clear input, reset height to 1
-			m.input.SetValue("")
-			m.input.SetHeight(1)
-			// Recompute viewport height after clearing input
-			m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8
 
-			switch strings.TrimSpace(raw) {
-			case "/exit":
+			case "/exit", "/quit":
 				return m, tea.Quit
+
 			case "/clear":
-				m.buf.Reset()
-				// Clear the in-memory conversation history as well
-				agent.History = agent.History[:0]
-				m.vp.SetContent("")
-				return m, nil
-			case "/models":
-				// TODO:
-				return m, nil
+				m.ti.Reset()
+				m.chatHistory = ""
+				m.updateHeights()
+				return m, tea.Batch(m.updateTextinput(msg), m.updateViewport(msg))
+
+			default:
+				if strings.HasSuffix(v, "\\") {
+					m.ti.SetValue(strings.TrimSuffix(v, "\\"))
+					// increasing the textinput's height when the user adds more lines.
+					if m.inputHeight+1 < 10 {
+						m.inputHeight += 1
+					}
+					m.updateHeights()
+					return m, m.updateTextinput(msg)
+				}
+				return m, tea.Batch(m.handleSubmit(v), m.updateViewport(msg), m.updateTextinput(msg))
 			}
 
-			m.busy = true
-			m.ch = agent.ChatWithLLM(raw)
-			m.busyStatus = "Processing…"
-			m.vp.SetContent(renderHistory(m.vp.Width))
-			m.vp.GotoBottom()
-
-			return m, tea.Batch(m.spin.Tick, m.waitForChunk())
+		case "esc":
+			if m.escPressed {
+				m.ti.Reset()
+				m.logMessage = ""
+				m.escPressed = false
+				m.busy = false
+				m.busyStatus = ""
+			} else if m.busy || m.ti.Value() != "" {
+				m.escPressed = true
+				if m.busy {
+					m.logMessage = "Press Esc again to cancel the process."
+				} else {
+					m.logMessage = "Press Esc again to clear the input."
+				}
+			}
 		}
 
 	case spinner.TickMsg:
+		// only accepting the TickMsg when the CLI is busy
 		if m.busy {
-			var cmd tea.Cmd
-			m.spin, cmd = m.spin.Update(msg)
-			return m, cmd
+			sp, cmd := m.sp.Update(msg)
+			cmds = append(cmds, cmd)
+			m.sp = sp
 		}
-		return m, nil
-
-	case InfoMsg:
-		m.status = successSt.Render(string(msg))
-		return m, clearMsgTick()
-
-	case ErrMsg:
-		m.status = errorSt.Render(string(msg))
-		return m, clearMsgTick()
-
-	case ClearStatusMsg:
-		m.status = ""
-		return m, nil
-
-	case streamChunkMsg:
-		m.busyStatus = "Thinking…"
-		m.busy = true
-		isAtBottom := m.vp.AtBottom()
-		// Re-render the full history (agent updates History incrementally)
-		m.vp.SetContent(renderHistory(m.vp.Width))
-		if isAtBottom {
-			m.vp.GotoBottom()
-		}
-		return m, m.waitForChunk()
-
-	case streamDoneMsg:
-		isAtBottom := m.vp.AtBottom()
-		// After stream completes, History already holds the final assistant message
-		m.vp.SetContent(renderHistory(m.vp.Width))
-		if isAtBottom {
-			m.vp.GotoBottom()
-		}
-		m.busy = false
-		m.busyStatus = ""
-		return m, func() tea.Msg { return InfoMsg("Successfully generated reply from the LLM!") }
 	}
 
-	var inputCmd, viewportCmd tea.Cmd
-	m.input, inputCmd = m.input.Update(msg)
-	// Keep input height responsive to content changes (cap at 10)
-	visibleRows := min(m.inputMaxRows, countLines(m.input.Value()))
-	if visibleRows < 1 {
-		visibleRows = 1
-	}
-	m.input.SetHeight(visibleRows)
-	m.vp.Height = m.height - ROOT_PADDING_Y*2 - 8 - (visibleRows - 1)
-	m.vp, viewportCmd = m.vp.Update(msg)
-	return m, tea.Batch(inputCmd, viewportCmd)
+	m.updateHeights()
+	cmds = append(cmds, m.updateTextinput(msg), m.updateViewport(msg))
+	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
-	maxContentWidth := max(m.width-(ROOT_PADDING_X*2)-2, 1)
-	header := titleSt.Render("CLI Agent  ")
-	header += mutedText.Render(configs.WorkingPath)
-	busyLine := ""
+func (m *TuiModel) updateHeights() {
+	if m.logMessage != "" && m.busyStatus != "" {
+		m.statusHeight = 3
+	} else if m.busyStatus != "" || m.logMessage != "" {
+		m.statusHeight = 2
+	} else {
+		m.statusHeight = 0
+	}
+
+	m.ti.SetWidth(m.maxWidth - 4)
+	m.ti.SetHeight(m.inputHeight)
+
+	// This function calculates and updates the viewport's height based on the other
+	// components of the TUI.
+	remainingHeight := m.maxHeight - m.inputHeight - m.headerHeight - m.footerHeight - m.statusHeight
+	m.vp.Width = m.maxWidth
+	m.vp.Height = remainingHeight
+}
+
+func (m *TuiModel) updateTextinput(msg tea.Msg) tea.Cmd {
 	if m.busy {
-		busyLine = fmt.Sprintf("%s%s", m.spin.View(), m.busyStatus)
+		m.ti.Reset()
+		m.ti.Blur()
+	} else {
+		m.ti.Focus()
 	}
-	inputField := inputBoxSt.Width(maxContentWidth).Render(m.input.View())
-	controls := helpSt.Render(fmt.Sprintf("Enter: submit • Ctrl+J: new line • /exit: quit • /clear: clear history • Model: %s",
-		agent.Model.String()))
-	finalView := lipgloss.NewStyle().
-		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
-		Width(max(m.width, 1)).
-		Height(max(m.height, 1)).
-		Render(fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s\n",
-			header,
-			m.vp.View(),
-			busyLine,
-			m.status,
-			inputField,
-			controls,
-		))
-	return finalView
+
+	var cmd tea.Cmd
+	m.ti, cmd = m.ti.Update(msg)
+
+	// ensuring the input size get's trimmed when there are lines with no content.
+	if m.inputHeight > m.ti.LineCount() {
+		m.inputHeight = m.ti.LineCount()
+		m.ti.SetWidth(m.maxWidth - 4)
+		m.ti.SetHeight(m.inputHeight)
+	}
+
+	return cmd
 }
 
-func (m model) waitForChunk() tea.Cmd {
-	return func() tea.Msg {
-		if s, ok := <-m.ch; ok {
-			return streamChunkMsg(s)
+func (m *TuiModel) updateViewport(msg tea.Msg) tea.Cmd {
+	var (
+		cmd         tea.Cmd
+		wasAtBottom = m.vp.AtBottom()
+	)
+
+	m.vp.SetContent(m.chatHistory)
+	m.vp.Style = m.vp.Style.Padding(1)
+	m.vp, cmd = m.vp.Update(msg)
+
+	if wasAtBottom {
+		m.vp.GotoBottom()
+	}
+
+	return cmd
+}
+
+func (m *TuiModel) handleSubmit(userInput string) tea.Cmd {
+	m.chatHistory += fmt.Sprintf("USER: %s\n", userInput)
+	m.busy = true
+	m.busyStatus = "Processing…"
+	m.updateHeights()
+	return tea.Tick(m.sp.Spinner.FPS, func(time.Time) tea.Msg { return m.sp.Tick() })
+}
+
+func (m TuiModel) View() string {
+	finalView := strings.Builder{}
+	finalView.WriteString(headerSt.Height(m.headerHeight).Render("CLI Agent"))
+	finalView.WriteString("\n")
+	finalView.WriteString(m.vp.View())
+	finalView.WriteString("\n")
+	if m.statusHeight > 0 {
+		statusView := strings.Builder{}
+		if m.busyStatus != "" {
+			statusView.WriteString(m.sp.View())
+			statusView.WriteString(" " + m.busyStatus)
+			if m.logMessage != "" {
+				statusView.WriteString("\n")
+			}
 		}
-		return streamDoneMsg{}
+		if m.logMessage != "" {
+			statusView.WriteString(m.logMessage)
+		}
+		finalView.WriteString(styled.Padding(0, 1).PaddingBottom(1).Height(m.statusHeight).Render(statusView.String()))
+		finalView.WriteString("\n")
 	}
-}
+	finalView.WriteString(m.ti.View())
+	finalView.WriteString("\n")
+	finalView.WriteString(footerSt.Height(m.footerHeight).Render("auto-accept mode on"))
 
-func clearMsgTick() tea.Cmd {
-	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
-		return ClearStatusMsg{}
-	})
-}
-
-func getInputPlaceholder() string {
-	return utils.Ternary(len(agent.History) == 0, "Enter your message", "Write a follow up")
+	return finalView.String()
 }
 
 func StartProgram() {
@@ -266,11 +248,4 @@ func StartProgram() {
 		log.Println("Error:", err)
 		os.Exit(1)
 	}
-}
-
-func countLines(s string) int {
-	if s == "" {
-		return 1
-	}
-	return strings.Count(s, "\n") + 1
 }
