@@ -96,4 +96,28 @@ for await (const line of console) {
       }
     });
   }
+
+  sendEvent({
+    event: "end",
+    history: chunks.map((c) => {
+      const ev: MsgEvent["history"][number] = {
+        id: c.id!,
+        reasoning: "",
+        content: "",
+        toolName: "",
+        toolArgs: "",
+      };
+
+      c.contentBlocks.forEach((b) => {
+        if (typeof b.reasoning === "string" && b.reasoning.trim()) {
+          ev.reasoning = b.reasoning;
+        }
+        if (typeof b.text === "string" && b.text.trim()) {
+          ev.content = b.text;
+        }
+      });
+
+      return ev;
+    }),
+  });
 }

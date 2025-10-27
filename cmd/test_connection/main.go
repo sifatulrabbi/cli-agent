@@ -103,9 +103,11 @@ func main() {
 }
 
 func readAndPrintServerEvents(serverStdout io.Reader) {
-	var msgCache []HistoryMessage
+	var (
+		msgCache []HistoryMessage
+		rd       = bufio.NewReader(serverStdout)
+	)
 
-	rd := bufio.NewReader(serverStdout)
 	for {
 		line, err := rd.ReadBytes('\n')
 		if err != nil {
@@ -135,8 +137,10 @@ func readAndPrintServerEvents(serverStdout io.Reader) {
 
 				if last < 0 {
 					msgCache = append(msgCache, delta)
-					continue
+					last = len(msgCache) - 1
 				}
+
+				fmt.Printf("%s%s", delta.Reasoning, delta.Content)
 
 				cachedMsg := msgCache[last]
 
@@ -167,8 +171,8 @@ func readAndPrintServerEvents(serverStdout io.Reader) {
 					}
 				}
 			}
+			fmt.Println()
+			fmt.Println()
 		}
-
-		fmt.Printf("History count: %d.\nDelta: %s\n", len(msgCache), msgEvent)
 	}
 }
