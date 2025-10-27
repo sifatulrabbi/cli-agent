@@ -57,18 +57,8 @@ The server reads `OPENAI_API_KEY` from env or a `.env` in `server/`.
 
 ### Roadmap / TODOs
 
-- [x] Render without jankyness
-- [x] Text input
-- [x] Text input with multi line support
-- [ ] Todo tool for step by step agent mode
-- [ ] Auto compact the context when reaching context limit
-- [ ] Web search tool
-- [x] Grep tool
-- [x] Create new files and folders tool
-- [x] Remove files and folders tool
-- [x] Append or patch files tool
-- [x] Select files of the working dir using '@'
-- [ ] LSP integration for linting
+- [ ] Smooth hand over between non-reasoning and reasoning agents.
+- [ ] Proper planning step to create todo list that is not too bloated.
 
 ### License
 

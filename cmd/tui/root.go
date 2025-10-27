@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 Md Sifatul Islam Rabbi <sifatulrabbii@gmail.com>
-*/
 package cmd
 
 import (
