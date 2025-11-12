@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/sifatulrabbi/cli-agent/cmd"
+	cmd "github.com/sifatulrabbi/cli-agent/cmd/tui"
 	"github.com/sifatulrabbi/cli-agent/internals/configs"
 )
 

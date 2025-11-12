@@ -10,10 +10,14 @@ type MsgEvent = {
   event: "delta" | "end" | "start";
   history: {
     id: string;
+    type: string; // ai | user | tool
     reasoning: string;
     content: string;
-    toolName: string;
-    toolArgs: string;
+    toolCalls: {
+      id: string;
+      name: string;
+      args: string;
+    }[]; // only available when the type === ai
   }[];
 };
 
@@ -38,10 +42,10 @@ for await (const line of console) {
     history: [
       {
         id: v4(),
+        type: "user",
         reasoning: "",
         content: result.userInput,
-        toolName: "",
-        toolArgs: "",
+        toolCalls: [],
       },
     ],
   });
@@ -72,10 +76,10 @@ for await (const line of console) {
           history: [
             {
               id: message.id!,
+              type: "ai",
               reasoning: block.reasoning as string,
               content: "",
-              toolName: "",
-              toolArgs: "",
+              toolCalls: [],
             },
           ],
         });
@@ -86,10 +90,10 @@ for await (const line of console) {
           history: [
             {
               id: message.id!,
+              type: "ai",
               reasoning: "",
               content: block.text as string,
-              toolName: "",
-              toolArgs: "",
+              toolCalls: [],
             },
           ],
         });
@@ -102,10 +106,10 @@ for await (const line of console) {
     history: chunks.map((c) => {
       const ev: MsgEvent["history"][number] = {
         id: c.id!,
+        type: "ai",
         reasoning: "",
         content: "",
-        toolName: "",
-        toolArgs: "",
+        toolCalls: [],
       };
 
       c.contentBlocks.forEach((b) => {

@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sifatulrabbi/cli-agent/internals/agent"
-	"github.com/sifatulrabbi/cli-agent/internals/db"
 )
 
 type TuiModel struct {
@@ -24,7 +23,8 @@ type TuiModel struct {
 	busyStatus string
 	logMessage string
 
-	chatHistory string
+	agentExecutor    *agent.AgentExecutor
+	formattedHistory string
 
 	escPressed bool
 
@@ -34,8 +34,6 @@ type TuiModel struct {
 	headerHeight int
 	footerHeight int
 	statusHeight int
-
-	agent *agent.CLIAgent
 }
 
 func New() TuiModel {
@@ -50,7 +48,6 @@ func New() TuiModel {
 		footerHeight: 2,
 		statusHeight: 2,
 		busy:         false,
-		agent:        agent.NewAgent(&db.AgentHistory{}),
 	}
 
 	m.ti.ShowLineNumbers = false
@@ -59,6 +56,8 @@ func New() TuiModel {
 	m.ti.SetHeight(m.inputHeight)
 	m.vp.MouseWheelEnabled = true
 	m.sp.Spinner = spinner.Points
+
+	m.agentExecutor = agent.New()
 
 	return m
 }
@@ -101,14 +100,15 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "/clear":
 				m.ti.Reset()
-				m.chatHistory = ""
+				m.formattedHistory = ""
 				m.updateHeights()
 				return m, tea.Batch(m.updateTextinput(msg), m.updateViewport(msg))
 
 			default:
 				if strings.HasSuffix(v, "\\") {
 					m.ti.SetValue(strings.TrimSuffix(v, "\\"))
-					// increasing the textinput's height when the user adds more lines.
+					// Increasing the textinput's height when the user adds more lines.
+					// While the max input field height would be 10 units.
 					if m.inputHeight+1 < 10 {
 						m.inputHeight += 1
 					}
@@ -128,7 +128,7 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.busy || m.ti.Value() != "" {
 				m.escPressed = true
 				if m.busy {
-					m.logMessage = "Press Esc again to cancel the process."
+					m.logMessage = "Press Esc again to cancel the request."
 				} else {
 					m.logMessage = "Press Esc again to clear the input."
 				}
@@ -136,7 +136,7 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		// only accepting the TickMsg when the CLI is busy
+		// Only accepting the TickMsg when the CLI is busy
 		if m.busy {
 			sp, cmd := m.sp.Update(msg)
 			cmds = append(cmds, cmd)
@@ -149,7 +149,14 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// Updates heights for various TUI elements. Should be called once at the begining
+// then whenever we feel like we need to adjust the element heights. e.g. After input,
+// during streams, etc.
 func (m *TuiModel) updateHeights() {
+	// Right now the TUI may have both a busy status and a log message. e.g. Which todo the
+	// model is currently handling can be a log message. Or if the agent fails and returns
+	// an error message then we could show that in the log message. The height for the
+	// log message + busy status message panel should be adjusted based on the need.
 	if m.logMessage != "" && m.busyStatus != "" {
 		m.statusHeight = 3
 	} else if m.busyStatus != "" || m.logMessage != "" {
@@ -158,16 +165,17 @@ func (m *TuiModel) updateHeights() {
 		m.statusHeight = 0
 	}
 
-	m.ti.SetWidth(m.maxWidth - 4)
+	m.ti.SetWidth(m.maxWidth - 4) // The '- 4' ensures padding of the x-axis.
 	m.ti.SetHeight(m.inputHeight)
 
-	// This function calculates and updates the viewport's height based on the other
-	// components of the TUI.
+	// The viewport that display chat history gets the last remaining height of the TUI
 	remainingHeight := m.maxHeight - m.inputHeight - m.headerHeight - m.footerHeight - m.statusHeight
 	m.vp.Width = m.maxWidth
 	m.vp.Height = remainingHeight
 }
 
+// Update the multi-line input's height accordingly then return a input update command
+// of the text input package.
 func (m *TuiModel) updateTextinput(msg tea.Msg) tea.Cmd {
 	if m.busy {
 		m.ti.Reset()
@@ -177,28 +185,33 @@ func (m *TuiModel) updateTextinput(msg tea.Msg) tea.Cmd {
 	}
 
 	var cmd tea.Cmd
-	m.ti, cmd = m.ti.Update(msg)
+	m.ti, cmd = m.ti.Update(msg) // Updates the text input's model with the message.
 
-	// ensuring the input size get's trimmed when there are lines with no content.
+	// Ensuring the input size get's trimmed when there are lines with no content.
 	if m.inputHeight > m.ti.LineCount() {
 		m.inputHeight = m.ti.LineCount()
-		m.ti.SetWidth(m.maxWidth - 4)
+		m.ti.SetWidth(m.maxWidth - 4) // The '- 4' ensure the padding of the x-axis
 		m.ti.SetHeight(m.inputHeight)
 	}
 
 	return cmd
 }
 
+// Update the viewport with the chat history content and scroll to the bottom if the user
+// has not interrupted the auto scrolling behavior.
 func (m *TuiModel) updateViewport(msg tea.Msg) tea.Cmd {
 	var (
 		cmd         tea.Cmd
 		wasAtBottom = m.vp.AtBottom()
 	)
 
-	m.vp.SetContent(m.chatHistory)
+	m.vp.SetContent(m.formattedHistory)
 	m.vp.Style = m.vp.Style.Padding(1)
 	m.vp, cmd = m.vp.Update(msg)
 
+	// If the before update state is right at the bottom meaning the user never tried to
+	// scroll up then it means we can scroll down on new content. Else we'd stay where the
+	// UI is.
 	if wasAtBottom {
 		m.vp.GotoBottom()
 	}
@@ -207,11 +220,19 @@ func (m *TuiModel) updateViewport(msg tea.Msg) tea.Cmd {
 }
 
 func (m *TuiModel) handleSubmit(userInput string) tea.Cmd {
-	m.chatHistory += fmt.Sprintf("USER: %s\n", userInput)
+	m.formattedHistory += fmt.Sprintf("USER: %s\n", userInput)
 	m.busy = true
 	m.busyStatus = "Processing…"
 	m.updateHeights()
-	return tea.Tick(m.sp.Spinner.FPS, func(time.Time) tea.Msg { return m.sp.Tick() })
+
+	cmds := []tea.Cmd{
+		tea.Tick(
+			m.sp.Spinner.FPS,
+			func(time.Time) tea.Msg { return m.sp.Tick() },
+		),
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m TuiModel) View() string {
@@ -220,21 +241,27 @@ func (m TuiModel) View() string {
 	finalView.WriteString("\n")
 	finalView.WriteString(m.vp.View())
 	finalView.WriteString("\n")
+
 	if m.statusHeight > 0 {
 		statusView := strings.Builder{}
+
 		if m.busyStatus != "" {
 			statusView.WriteString(m.sp.View())
 			statusView.WriteString(" " + m.busyStatus)
+
 			if m.logMessage != "" {
 				statusView.WriteString("\n")
 			}
 		}
+
 		if m.logMessage != "" {
 			statusView.WriteString(m.logMessage)
 		}
+
 		finalView.WriteString(styled.Padding(0, 1).PaddingBottom(1).Height(m.statusHeight).Render(statusView.String()))
 		finalView.WriteString("\n")
 	}
+
 	finalView.WriteString(m.ti.View())
 	finalView.WriteString("\n")
 	finalView.WriteString(footerSt.Height(m.footerHeight).Render("auto-accept mode on"))
@@ -244,6 +271,7 @@ func (m TuiModel) View() string {
 
 func StartProgram() {
 	p := tea.NewProgram(New(), tea.WithMouseAllMotion())
+
 	if _, err := p.Run(); err != nil {
 		log.Println("Error:", err)
 		os.Exit(1)
